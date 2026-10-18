@@ -84,9 +84,9 @@ class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
     }
 
-    @ExceptionHandler(BusinessException::class)
+    @ExceptionHandler(BusinessException::class, IllegalStateException::class)
     fun handleBusinessException(
-        ex: BusinessException,
+        ex: Exception,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
         logger.warn("[422 Unprocessable Entity] em {}: {}", request.requestURI, ex.message)
