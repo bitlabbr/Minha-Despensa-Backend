@@ -193,6 +193,13 @@ Todos os arquivos de código-fonte (`.kt`), em `src/main` e `src/test`, devem co
  */
 ```
 
+### 4.6. Governança, Licenciamento & Automação CI/CD Obrigatórios
+O repositório do backend adota formalmente os padrões de engenharia de software e governança do ecossistema:
+- **`LICENSE`:** Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0), resguardando todos os direitos comerciais para Willian Santos.
+- **`CONTRIBUTING.md`:** Normas para colaboradores, incluindo Contributor License Agreement (CLA), arquitetura de módulos, exigência de 100% de testes verdes e fluxo de PRs.
+- **`.github/workflows/ci.yml`:** Pipeline de Integração Contínua acionado em pushes e PRs para `main`, `dev` e `epic/**`. Executa compilação, testes unitários, empacotamento do fat JAR e validação da imagem Docker.
+- **`.github/workflows/pages.yml`:** Pipeline de Entrega Contínua de documentação estática para o GitHub Pages com suporte a diagramas Mermaid.js e renderização do guia arquitetural.
+
 ---
 
 ## 5. 🚢 Runbook Oficial de Build & Deploy
