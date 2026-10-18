@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class InvoiceParseServiceTest {
 
@@ -87,6 +88,99 @@ class InvoiceParseServiceTest {
         assertEquals("UN", item2.measureUnit)
         assertEquals(899L, item2.unitPriceInCents)
         assertEquals(899L, item2.totalPriceInCents)
+    }
+
+    @Test
+    fun `parseHtml should correctly extract data from raw SEFAZ NFC-e XML with det and prod elements`() {
+        val sampleXml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+                <NFe>
+                    <infNFe Id="NFe26241012345678000190650010001234561001234567">
+                        <ide>
+                            <dhEmi>2026-10-18T14:35:20-03:00</dhEmi>
+                        </ide>
+                        <emit>
+                            <xNome>HIPER BOMPRECO SUPERMERCADOS LTDA</xNome>
+                            <xFant>BOMPRECO</xFant>
+                        </emit>
+                        <det nItem="1">
+                            <prod>
+                                <cProd>1001</cProd>
+                                <cEAN>7891000100010</cEAN>
+                                <xProd>LEITE INTEGRAL UHT 1L</xProd>
+                                <qCom>3.0000</qCom>
+                                <uCom>UN</uCom>
+                                <vUnCom>4.9900</vUnCom>
+                                <vProd>14.97</vProd>
+                            </prod>
+                        </det>
+                        <det nItem="2">
+                            <prod>
+                                <cProd>2002</cProd>
+                                <cEAN>SEM GTIN</cEAN>
+                                <xProd>MACA NACIONAL KG</xProd>
+                                <qCom>1.5000</qCom>
+                                <uCom>KG</uCom>
+                                <vUnCom>9.8000</vUnCom>
+                                <vProd>14.70</vProd>
+                            </prod>
+                        </det>
+                    </infNFe>
+                </NFe>
+            </nfeProc>
+        """.trimIndent()
+
+        val qrCodeUrl = "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=26241012345678000190650010001234561001234567|2|1|1|HASH"
+        val result = service.parseHtml(sampleXml, qrCodeUrl)
+
+        assertEquals("HIPER BOMPRECO SUPERMERCADOS LTDA", result.storeName)
+        assertEquals("26241012345678000190650010001234561001234567", result.accessKey)
+        assertNotNull(result.emissionDate)
+        assertEquals(2, result.items.size)
+
+        val item1 = result.items[0]
+        assertEquals("7891000100010", item1.ean)
+        assertEquals("LEITE INTEGRAL UHT 1L", item1.name)
+        assertEquals(3.0, item1.quantity)
+        assertEquals("UN", item1.measureUnit)
+        assertEquals(499L, item1.unitPriceInCents)
+        assertEquals(1497L, item1.totalPriceInCents)
+
+        val item2 = result.items[1]
+        assertEquals(null, item2.ean)
+        assertEquals("MACA NACIONAL KG", item2.name)
+        assertEquals(1.5, item2.quantity)
+        assertEquals("KG", item2.measureUnit)
+        assertEquals(980L, item2.unitPriceInCents)
+        assertEquals(1470L, item2.totalPriceInCents)
+    }
+
+    @Test
+    fun `parseHtml should throw IllegalStateException when SEFAZ returns error XML tag`() {
+        val errorXml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
+                <erro>236</erro>
+                <consulta>0</consulta>
+                <dataHora>18/10/2026 19:49:29</dataHora>
+            </nfeProc>
+        """.trimIndent()
+
+        val qrCodeUrl = "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=26241012345678000190650010001234561001234567|2|1|1|HASH"
+        val ex = assertThrows<IllegalStateException> {
+            service.parseHtml(errorXml, qrCodeUrl)
+        }
+        assertTrue(ex.message!!.contains("236"))
+    }
+
+    @Test
+    fun `parseHtml should throw IllegalStateException when no products found`() {
+        val emptyHtml = "<html><body><div>Página sem produtos</div></body></html>"
+        val qrCodeUrl = "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=26241012345678000190650010001234561001234567"
+        assertThrows<IllegalStateException> {
+            service.parseHtml(emptyHtml, qrCodeUrl)
+        }
     }
 
     @Test

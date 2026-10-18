@@ -28,10 +28,12 @@ import com.bitlabbr.minhadespensa.modules.invoice.dto.InvoiceResponseDto
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.parser.Parser
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.net.URI
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 import kotlin.math.roundToLong
@@ -54,15 +56,16 @@ class InvoiceParseService {
 
     internal fun fetchHtml(url: String): String {
         return try {
-            Jsoup.connect(url)
+            val response = Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                 .header("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
                 .timeout(20000)
                 .followRedirects(true)
                 .ignoreContentType(true)
-                .get()
-                .html()
+                .execute()
+
+            response.body()
         } catch (ex: Exception) {
             logger.error("Falha ao efetuar download da página da SEFAZ na URL {}: {}", url, ex.message)
             throw IllegalStateException("Não foi possível acessar a página da SEFAZ: ${ex.message}", ex)
@@ -70,12 +73,33 @@ class InvoiceParseService {
     }
 
     internal fun parseHtml(html: String, qrCodeContent: String): InvoiceResponseDto {
-        val doc: Document = Jsoup.parse(html)
+        val isXml = html.contains("<nfeProc") || html.contains("<infNFe") || html.contains("<erro")
+        val doc: Document = if (isXml) {
+            Jsoup.parse(html, "", Parser.xmlParser())
+        } else {
+            Jsoup.parse(html)
+        }
+
+        val errorElement = doc.select("erro").firstOrNull()
+        if (errorElement != null && errorElement.text().isNotBlank()) {
+            val errorCode = errorElement.text().trim()
+            logger.warn("SEFAZ retornou erro código '{}' ao processar nota fiscal", errorCode)
+            throw IllegalStateException("A SEFAZ retornou o código de erro $errorCode. Verifique se o QR Code é válido.")
+        }
 
         val accessKey = extractAccessKey(doc, qrCodeContent)
         val storeName = extractStoreName(doc)
         val emissionDate = extractEmissionDate(doc)
-        val items = extractItems(doc)
+        val items = if (isXml && doc.select("det, infNFe > det, prod").isNotEmpty()) {
+            extractXmlItems(doc)
+        } else {
+            extractItems(doc)
+        }
+
+        if (items.isEmpty()) {
+            logger.warn("Nenhum item foi extraído da resposta da SEFAZ para chave='{}'", accessKey)
+            throw IllegalStateException("Nenhum produto foi encontrado nesta nota fiscal. Verifique se o QR Code é válido.")
+        }
 
         logger.info(
             "Nota fiscal processada com sucesso: Loja='{}', Chave='{}', Itens={}",
@@ -93,7 +117,7 @@ class InvoiceParseService {
     }
 
     private fun extractUrl(content: String): String {
-        val urlMatcher = Pattern.compile("https?://[^\\s|]+").matcher(content)
+        val urlMatcher = Pattern.compile("https?://[^\\s]+").matcher(content)
         return if (urlMatcher.find()) {
             urlMatcher.group()
         } else if (content.startsWith("http://") || content.startsWith("https://")) {
@@ -104,6 +128,15 @@ class InvoiceParseService {
     }
 
     private fun extractAccessKey(doc: Document, qrCodeContent: String): String? {
+        val infNfeId = doc.select("infNFe").attr("Id").removePrefix("NFe").filter { it.isDigit() }
+        if (infNfeId.length == 44) {
+            return infNfeId
+        }
+        val chNFe = doc.select("chNFe").text().trim().filter { it.isDigit() }
+        if (chNFe.length == 44) {
+            return chNFe
+        }
+
         val chaveSpan = doc.select(".chave, span.chave, .chaveAcesso").text().trim()
         val digitsFromSpan = chaveSpan.filter { it.isDigit() }
         if (digitsFromSpan.length == 44) {
@@ -139,6 +172,15 @@ class InvoiceParseService {
     }
 
     private fun extractStoreName(doc: Document): String {
+        val xmlEmitName = doc.select("emit xNome, emit > xNome").firstOrNull()?.text()?.trim()
+        if (!xmlEmitName.isNullOrBlank()) {
+            return xmlEmitName
+        }
+        val xmlEmitFant = doc.select("emit xFant, emit > xFant").firstOrNull()?.text()?.trim()
+        if (!xmlEmitFant.isNullOrBlank()) {
+            return xmlEmitFant
+        }
+
         val topoSelectors = listOf(
             ".txtTopo",
             "#u20",
@@ -165,6 +207,21 @@ class InvoiceParseService {
     }
 
     private fun extractEmissionDate(doc: Document): String? {
+        val xmlDhEmi = doc.select("ide dhEmi, ide > dhEmi, dhEmi").firstOrNull()?.text()?.trim()
+        if (!xmlDhEmi.isNullOrBlank()) {
+            return try {
+                val parsed = OffsetDateTime.parse(xmlDhEmi).toLocalDateTime()
+                parsed.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+            } catch (_: Exception) {
+                try {
+                    val parsed = LocalDateTime.parse(xmlDhEmi.take(19))
+                    parsed.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                } catch (_: Exception) {
+                    xmlDhEmi
+                }
+            }
+        }
+
         val text = doc.text()
         val dateMatcher = Pattern.compile("(\\d{2}/\\d{2}/\\d{4})(?:\\s+(\\d{2}:\\d{2}(?::\\d{2})?))?").matcher(text)
         if (dateMatcher.find()) {
@@ -180,6 +237,49 @@ class InvoiceParseService {
             }
         }
         return null
+    }
+
+    private fun extractXmlItems(doc: Document): List<InvoiceItemResponseDto> {
+        val detElements = doc.select("det, infNFe > det")
+        val items = mutableListOf<InvoiceItemResponseDto>()
+
+        for (det in detElements) {
+            val prod = det.select("prod").firstOrNull() ?: det
+            val name = prod.select("xProd").text().trim()
+            if (name.isBlank()) continue
+
+            val rawEan = prod.select("cEAN").text().trim().filter { it.isDigit() }
+            val rawProdCode = prod.select("cProd").text().trim().filter { it.isDigit() }
+            val ean = if (rawEan.length in 8..14 && rawEan != "SEM GTIN") {
+                rawEan
+            } else if (rawProdCode.length in 8..14) {
+                rawProdCode
+            } else {
+                null
+            }
+
+            val quantity = prod.select("qCom").text().trim().replace(",", ".").toDoubleOrNull() ?: 1.0
+            val measureUnit = prod.select("uCom").text().trim().uppercase().ifBlank { "UN" }
+            val unitPriceInCents = prod.select("vUnCom").text().trim().replace(",", ".").toDoubleOrNull()?.let {
+                (it * 100).roundToLong()
+            }
+            val totalPriceInCents = prod.select("vProd").text().trim().replace(",", ".").toDoubleOrNull()?.let {
+                (it * 100).roundToLong()
+            } ?: unitPriceInCents?.let { (quantity * it).roundToLong() }
+
+            items.add(
+                InvoiceItemResponseDto(
+                    ean = ean,
+                    name = name,
+                    quantity = quantity,
+                    measureUnit = measureUnit,
+                    unitPriceInCents = unitPriceInCents,
+                    totalPriceInCents = totalPriceInCents
+                )
+            )
+        }
+
+        return items
     }
 
     private fun extractItems(doc: Document): List<InvoiceItemResponseDto> {
