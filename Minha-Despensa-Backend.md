@@ -165,6 +165,34 @@ O backend possui um pipeline unificado de logs para auditoria de tráfego móvel
   ssh domus-vpn "docker logs -f --tail 30 despensa_api"
   ```
 
+### 4.5. Cabeçalho de Licença e Autoria Obrigatório (CC BY-NC 4.0)
+Todos os arquivos de código-fonte (`.kt`), em `src/main` e `src/test`, devem conter o cabeçalho padronizado da licença CC BY-NC 4.0:
+
+```kotlin
+/*
+ *   Copyright (c) 2026 Willian Santos
+ *
+ *   This work is licensed under the Creative Commons
+ *   Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+ *
+ *   You are free to:
+ *     - Share  — copy and redistribute the material in any medium or format
+ *     - Adapt  — remix, transform, and build upon the material
+ *
+ *   Under the following terms:
+ *     - Attribution    — You must give appropriate credit, provide a link to
+ *                        the license, and indicate if changes were made.
+ *     - NonCommercial  — You may not use the material for commercial purposes.
+ *
+ *   Owner rights:
+ *     - Willian Santos retains all commercial rights.
+ *    - The copyright holder may use, sell, sublicense, or relicense this
+ *       work under different terms at any time.
+ *
+ *   Full license: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+ */
+```
+
 ---
 
 ## 5. 🚢 Runbook Oficial de Build & Deploy
