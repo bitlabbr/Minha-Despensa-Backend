@@ -148,11 +148,22 @@ Spring Boot 4.x utiliza Jackson 3 (`tools.jackson`). Em Kotlin data classes com 
 
 ### 4.3. Tratamento Centralizado de Exceções
 Todas as exceções são capturadas pelo [`GlobalExceptionHandler`](file:///Users/willian/Projetos/Minha-Despensa-Backend/Minha-Despensa-Backend/src/main/kotlin/com/bitlabbr/minhadespensa/common/exception/GlobalExceptionHandler.kt):
-- `ResourceNotFoundException` ➔ `404 Not Found`
-- `ConflictException` ➔ `409 Conflict`
-- `InvalidRequestException` ou `IllegalArgumentException` ➔ `400 Bad Request`
-- `BusinessException` ➔ `422 Unprocessable Entity`
-- `MethodArgumentNotValidException` ➔ `400 Bad Request` com array `fieldErrors`
+- `ResourceNotFoundException` ➔ `404 Not Found` (logado em `WARN`)
+- `ConflictException` ➔ `409 Conflict` (logado em `WARN`)
+- `InvalidRequestException` ou `IllegalArgumentException` ➔ `400 Bad Request` (logado em `WARN`)
+- `BusinessException` ➔ `422 Unprocessable Entity` (logado em `WARN`)
+- `MethodArgumentNotValidException` ➔ `400 Bad Request` com array `fieldErrors` (logado em `WARN`)
+- `Exception` genérica ➔ `500 Internal Server Error` (logado em `ERROR` com stack trace)
+
+### 4.4. Observabilidade & Estratégia de Logs
+O backend possui um pipeline unificado de logs para auditoria de tráfego móvel e solução rápida de problemas:
+- **`RequestLoggingFilter`:** Filtro servlet de alta prioridade que audita todas as requisições sob `/api/**`:
+  `[HTTP] {MÉTODO} {URI}{QUERY} - Status: {STATUS} ({DURAÇÃO}ms) - Client: {IP_TAILSCALE}`
+- **Formatação Estruturada:** Console configurado com timestamp UTC/ISO, thread, destaque de cores e logger da classe em `application.properties`.
+- **Inspeção Remota:** Durante o deploy e testes, os logs do container `despensa_api` devem ser inspecionados para validar o ciclo de vida e a chegada das requisições móveis:
+  ```bash
+  ssh domus-vpn "docker logs -f --tail 30 despensa_api"
+  ```
 
 ---
 
