@@ -21,6 +21,7 @@ class GlobalExceptionHandler {
         ex: ResourceNotFoundException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
+        logger.warn("[404 Not Found] em {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.NOT_FOUND.value(),
             error = HttpStatus.NOT_FOUND.reasonPhrase,
@@ -35,6 +36,7 @@ class GlobalExceptionHandler {
         ex: ConflictException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
+        logger.warn("[409 Conflict] em {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.CONFLICT.value(),
             error = HttpStatus.CONFLICT.reasonPhrase,
@@ -49,6 +51,7 @@ class GlobalExceptionHandler {
         ex: Exception,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
+        logger.warn("[400 Bad Request] em {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
@@ -63,6 +66,7 @@ class GlobalExceptionHandler {
         ex: BusinessException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
+        logger.warn("[422 Unprocessable Entity] em {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.UNPROCESSABLE_ENTITY.value(),
             error = HttpStatus.UNPROCESSABLE_ENTITY.reasonPhrase,
@@ -83,6 +87,7 @@ class GlobalExceptionHandler {
                 message = it.defaultMessage ?: "Valor inválido"
             )
         }
+        logger.warn("[400 Validation Error] em {}: {} campos com erro", request.requestURI, fieldErrors.size)
 
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
@@ -99,6 +104,7 @@ class GlobalExceptionHandler {
         ex: HttpMessageNotReadableException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
+        logger.warn("[400 Not Readable] em {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
