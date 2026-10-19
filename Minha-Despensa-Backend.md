@@ -79,7 +79,7 @@ com.bitlabbr.minhadespensa
 | **`shoppinglist`**| Listas de compras dinâmicas ou planejadas, itens pendentes/adquiridos, com regras de cascade soft-delete em itens órfãos. | `ShoppingListEntity`, `ShoppingItemEntity` |
 | **`price`** | Histórico financeiro de preços pagos por unidade, data e local de compra para alimentar comparativos de mercado. | `PriceEntryEntity` |
 | **`sync`** | Motor de reconciliação em lote: recebe push de alterações locais e fornece deltas incrementais no pull com `serverTimestamp`. | N/A (orquestra os repositórios dos domínios) |
-| **`invoice`** | Scraping e parsing de notas fiscais eletrônicas de consumidor (NFC-e SEFAZ PE) para auto-preenchimento do app. | DTOs de extração |
+| **`invoice`** | Scraping, parsing e agrupamento automático de produtos duplicados de notas fiscais eletrônicas de consumidor (NFC-e SEFAZ PE) para auto-preenchimento do app. | DTOs de extração |
 
 ---
 
@@ -148,11 +148,57 @@ Spring Boot 4.x utiliza Jackson 3 (`tools.jackson`). Em Kotlin data classes com 
 
 ### 4.3. Tratamento Centralizado de Exceções
 Todas as exceções são capturadas pelo [`GlobalExceptionHandler`](file:///Users/willian/Projetos/Minha-Despensa-Backend/Minha-Despensa-Backend/src/main/kotlin/com/bitlabbr/minhadespensa/common/exception/GlobalExceptionHandler.kt):
-- `ResourceNotFoundException` ➔ `404 Not Found`
-- `ConflictException` ➔ `409 Conflict`
-- `InvalidRequestException` ou `IllegalArgumentException` ➔ `400 Bad Request`
-- `BusinessException` ➔ `422 Unprocessable Entity`
-- `MethodArgumentNotValidException` ➔ `400 Bad Request` com array `fieldErrors`
+- `ResourceNotFoundException` ➔ `404 Not Found` (logado em `WARN`)
+- `ConflictException` ➔ `409 Conflict` (logado em `WARN`)
+- `InvalidRequestException` ou `IllegalArgumentException` ➔ `400 Bad Request` (logado em `WARN`)
+- `BusinessException` ➔ `422 Unprocessable Entity` (logado em `WARN`)
+- `MethodArgumentNotValidException` ➔ `400 Bad Request` com array `fieldErrors` (logado em `WARN`)
+- `Exception` genérica ➔ `500 Internal Server Error` (logado em `ERROR` com stack trace)
+
+### 4.4. Observabilidade & Estratégia de Logs
+O backend possui um pipeline unificado de logs para auditoria de tráfego móvel e solução rápida de problemas:
+- **`RequestLoggingFilter`:** Filtro servlet de alta prioridade que audita todas as requisições sob `/api/**`:
+  `[HTTP] {MÉTODO} {URI}{QUERY} - Status: {STATUS} ({DURAÇÃO}ms) - Client: {IP_TAILSCALE}`
+- **Formatação Estruturada:** Console configurado com timestamp UTC/ISO, thread, destaque de cores e logger da classe em `application.properties`.
+- **Inspeção Remota:** Durante o deploy e testes, os logs do container `despensa_api` devem ser inspecionados para validar o ciclo de vida e a chegada das requisições móveis:
+  ```bash
+  ssh domus-vpn "docker logs -f --tail 30 despensa_api"
+  ```
+
+### 4.5. Cabeçalho de Licença e Autoria Obrigatório (CC BY-NC 4.0)
+Todos os arquivos de código-fonte (`.kt`), em `src/main` e `src/test`, devem conter o cabeçalho padronizado da licença CC BY-NC 4.0:
+
+```kotlin
+/*
+ *   Copyright (c) 2026 Willian Santos
+ *
+ *   This work is licensed under the Creative Commons
+ *   Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+ *
+ *   You are free to:
+ *     - Share  — copy and redistribute the material in any medium or format
+ *     - Adapt  — remix, transform, and build upon the material
+ *
+ *   Under the following terms:
+ *     - Attribution    — You must give appropriate credit, provide a link to
+ *                        the license, and indicate if changes were made.
+ *     - NonCommercial  — You may not use the material for commercial purposes.
+ *
+ *   Owner rights:
+ *     - Willian Santos retains all commercial rights.
+ *    - The copyright holder may use, sell, sublicense, or relicense this
+ *       work under different terms at any time.
+ *
+ *   Full license: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+ */
+```
+
+### 4.6. Governança, Licenciamento & Automação CI/CD Obrigatórios
+O repositório do backend adota formalmente os padrões de engenharia de software e governança do ecossistema:
+- **`LICENSE`:** Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0), resguardando todos os direitos comerciais para Willian Santos.
+- **`CONTRIBUTING.md`:** Normas para colaboradores, incluindo Contributor License Agreement (CLA), arquitetura de módulos, exigência de 100% de testes verdes e fluxo de PRs.
+- **`.github/workflows/ci.yml`:** Pipeline de Integração Contínua acionado em pushes e PRs para `main`, `dev` e `epic/**`. Executa compilação, testes unitários, empacotamento do fat JAR e validação da imagem Docker.
+- **`.github/workflows/pages.yml`:** Pipeline de Entrega Contínua de documentação estática para o GitHub Pages com suporte a diagramas Mermaid.js e renderização do guia arquitetural.
 
 ---
 
