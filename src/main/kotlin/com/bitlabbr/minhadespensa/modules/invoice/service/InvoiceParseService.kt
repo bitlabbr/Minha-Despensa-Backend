@@ -32,6 +32,7 @@ import org.jsoup.parser.Parser
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.net.URI
+import java.text.Normalizer
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -90,11 +91,12 @@ class InvoiceParseService {
         val accessKey = extractAccessKey(doc, qrCodeContent)
         val storeName = extractStoreName(doc)
         val emissionDate = extractEmissionDate(doc)
-        val items = if (isXml && doc.select("det, infNFe > det, prod").isNotEmpty()) {
+        val rawItems = if (isXml && doc.select("det, infNFe > det, prod").isNotEmpty()) {
             extractXmlItems(doc)
         } else {
             extractItems(doc)
         }
+        val items = consolidateItems(rawItems)
 
         if (items.isEmpty()) {
             logger.warn("Nenhum item foi extraído da resposta da SEFAZ para chave='{}'", accessKey)
@@ -102,9 +104,10 @@ class InvoiceParseService {
         }
 
         logger.info(
-            "Nota fiscal processada com sucesso: Loja='{}', Chave='{}', Itens={}",
+            "Nota fiscal processada com sucesso: Loja='{}', Chave='{}', ItensBrutos={}, ItensAgrupados={}",
             storeName,
             accessKey,
+            rawItems.size,
             items.size
         )
 
@@ -454,5 +457,64 @@ class InvoiceParseService {
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun consolidateItems(rawItems: List<InvoiceItemResponseDto>): List<InvoiceItemResponseDto> {
+        val groups = mutableListOf<MutableList<InvoiceItemResponseDto>>()
+
+        for (item in rawItems) {
+            val itemUnit = item.measureUnit.trim().uppercase().ifBlank { "UN" }
+            val itemName = normalizeProductName(item.name)
+            val itemEan = item.ean?.trim()?.takeIf { it.isNotBlank() }
+
+            val matchingGroup = groups.firstOrNull { group ->
+                val representative = group.first()
+                val repUnit = representative.measureUnit.trim().uppercase().ifBlank { "UN" }
+                val repName = normalizeProductName(representative.name)
+                val repEan = group.firstNotNullOfOrNull { it.ean?.trim()?.takeIf { e -> e.isNotBlank() } }
+
+                repUnit == itemUnit && (
+                    (itemEan != null && repEan != null && itemEan == repEan) ||
+                        (repName.isNotBlank() && repName == itemName && (itemEan == null || repEan == null || itemEan == repEan))
+                    )
+            }
+
+            if (matchingGroup != null) {
+                matchingGroup.add(item)
+            } else {
+                groups.add(mutableListOf(item))
+            }
+        }
+
+        return groups.map { group ->
+            if (group.size == 1) {
+                group.first()
+            } else {
+                val first = group.first()
+                val totalQuantity = (group.sumOf { it.quantity } * 10000.0).roundToLong() / 10000.0
+                val totalPriceInCents = group.sumOf { item ->
+                    item.totalPriceInCents
+                        ?: item.unitPriceInCents?.let { (item.quantity * it).roundToLong() }
+                        ?: 0L
+                }
+                val resolvedEan = group.firstNotNullOfOrNull { it.ean?.trim()?.takeIf { e -> e.isNotBlank() } }
+                val resolvedUnitPrice = first.unitPriceInCents
+                    ?: group.firstNotNullOfOrNull { it.unitPriceInCents }
+
+                first.copy(
+                    ean = resolvedEan,
+                    quantity = totalQuantity,
+                    unitPriceInCents = resolvedUnitPrice,
+                    totalPriceInCents = totalPriceInCents
+                )
+            }
+        }
+    }
+
+    private fun normalizeProductName(name: String): String {
+        return Normalizer.normalize(name.trim(), Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+            .uppercase()
+            .replace(Regex("\\s+"), " ")
     }
 }

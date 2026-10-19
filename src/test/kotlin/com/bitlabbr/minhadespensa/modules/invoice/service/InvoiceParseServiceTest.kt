@@ -189,4 +189,85 @@ class InvoiceParseServiceTest {
             service.parseInvoiceFromQrCode("   ")
         }
     }
+
+    @Test
+    fun `parseHtml should consolidate duplicate products with same EAN or same name and sum quantities and totals`() {
+        val sampleXml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+                <NFe>
+                    <infNFe Id="NFe26241012345678000190650010001234561001234567">
+                        <emit>
+                            <xNome>ESTRADA DE BELEM COMERCIO DE ALIMENTOS</xNome>
+                        </emit>
+                        <det nItem="1">
+                            <prod>
+                                <cProd>101</cProd>
+                                <cEAN>7898123456789</cEAN>
+                                <xProd>PALMEIRON EXTRATO DE TOMATE</xProd>
+                                <qCom>1.0000</qCom>
+                                <uCom>UN</uCom>
+                                <vUnCom>2.7900</vUnCom>
+                                <vProd>2.79</vProd>
+                            </prod>
+                        </det>
+                        <det nItem="2">
+                            <prod>
+                                <cProd>101</cProd>
+                                <cEAN>7898123456789</cEAN>
+                                <xProd>PALMEIRON EXTRATO DE TOMATE</xProd>
+                                <qCom>2.0000</qCom>
+                                <uCom>UN</uCom>
+                                <vUnCom>2.7900</vUnCom>
+                                <vProd>5.58</vProd>
+                            </prod>
+                        </det>
+                        <det nItem="3">
+                            <prod>
+                                <cProd>202</cProd>
+                                <cEAN>SEM GTIN</cEAN>
+                                <xProd>MACA NACIONAL KG</xProd>
+                                <qCom>0.2900</qCom>
+                                <uCom>KG</uCom>
+                                <vUnCom>10.9900</vUnCom>
+                                <vProd>3.19</vProd>
+                            </prod>
+                        </det>
+                        <det nItem="4">
+                            <prod>
+                                <cProd>202</cProd>
+                                <cEAN>SEM GTIN</cEAN>
+                                <xProd>Maca Nacional KG</xProd>
+                                <qCom>0.7100</qCom>
+                                <uCom>KG</uCom>
+                                <vUnCom>10.9900</vUnCom>
+                                <vProd>7.80</vProd>
+                            </prod>
+                        </det>
+                    </infNFe>
+                </NFe>
+            </nfeProc>
+        """.trimIndent()
+
+        val qrCodeUrl = "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=26241012345678000190650010001234561001234567|2|1|1|HASH"
+        val result = service.parseHtml(sampleXml, qrCodeUrl)
+
+        assertEquals(2, result.items.size)
+
+        val palmeiron = result.items[0]
+        assertEquals("7898123456789", palmeiron.ean)
+        assertEquals("PALMEIRON EXTRATO DE TOMATE", palmeiron.name)
+        assertEquals(3.0, palmeiron.quantity)
+        assertEquals("UN", palmeiron.measureUnit)
+        assertEquals(279L, palmeiron.unitPriceInCents)
+        assertEquals(837L, palmeiron.totalPriceInCents)
+
+        val maca = result.items[1]
+        assertEquals(null, maca.ean)
+        assertEquals("MACA NACIONAL KG", maca.name)
+        assertEquals(1.0, maca.quantity)
+        assertEquals("KG", maca.measureUnit)
+        assertEquals(1099L, maca.unitPriceInCents)
+        assertEquals(1099L, maca.totalPriceInCents)
+    }
 }

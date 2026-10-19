@@ -79,7 +79,7 @@ com.bitlabbr.minhadespensa
 | **`shoppinglist`**| Listas de compras dinâmicas ou planejadas, itens pendentes/adquiridos, com regras de cascade soft-delete em itens órfãos. | `ShoppingListEntity`, `ShoppingItemEntity` |
 | **`price`** | Histórico financeiro de preços pagos por unidade, data e local de compra para alimentar comparativos de mercado. | `PriceEntryEntity` |
 | **`sync`** | Motor de reconciliação em lote: recebe push de alterações locais e fornece deltas incrementais no pull com `serverTimestamp`. | N/A (orquestra os repositórios dos domínios) |
-| **`invoice`** | Scraping e parsing de notas fiscais eletrônicas de consumidor (NFC-e SEFAZ PE) para auto-preenchimento do app. | DTOs de extração |
+| **`invoice`** | Scraping, parsing e agrupamento automático de produtos duplicados de notas fiscais eletrônicas de consumidor (NFC-e SEFAZ PE) para auto-preenchimento do app. | DTOs de extração |
 
 ---
 
