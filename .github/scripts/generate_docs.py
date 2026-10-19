@@ -95,7 +95,7 @@ def build():
                 <span class="badge">Spring Boot 4.x / Kotlin / Domus</span>
             </div>
             <div>
-                <a href="https://github.com/wjsarq/Minha-Despensa-Backend" style="color: var(--accent-color); text-decoration: none; font-size: 14px; font-weight: 500;">GitHub Repository ➔</a>
+                <a href="https://github.com/bitlabbr/Minha-Despensa-Backend" style="color: var(--accent-color); text-decoration: none; font-size: 14px; font-weight: 500;">GitHub Repository ➔</a>
             </div>
         </div>
         <div id="content" class="markdown-body"></div>

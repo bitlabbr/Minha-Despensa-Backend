@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ "main", "dev", "epic/**" ]
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -38,11 +43,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
-          path: build/libs/*.jar
+          path: |
+            build/libs/*.jar
+            !build/libs/*-plain.jar
           retention-days: 7
 
       - name: Publish JUnit Test Report
         if: always()
+        continue-on-error: true
         uses: mikepenz/action-junit-report@v4
         with:
           report_paths: '**/build/test-results/**/TEST-*.xml'
@@ -64,7 +72,7 @@ jobs:
 
       - name: Prepare JAR for Dockerfile
         run: |
-          JAR_FILE=$(ls *.jar | head -n 1)
+          JAR_FILE=$(ls *.jar | grep -v -- '-plain\.jar$' | head -n 1)
           cp "$JAR_FILE" app.jar
 
       - name: Build Docker Image
