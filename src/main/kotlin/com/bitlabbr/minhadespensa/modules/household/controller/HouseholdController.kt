@@ -49,6 +49,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestMethod
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -68,6 +69,25 @@ class HouseholdController(
         logger.info("[Households] User {} requested their households list", userId)
         val result = householdService.getUserHouseholds(userId)
         logger.info("[Households] User {} retrieved {} household(s)", userId, result.size)
+        return ApiResponse.ok(result)
+    }
+
+    @Operation(summary = "Obter detalhes de uma casa", description = "Retorna os detalhes de uma casa específica pelo ID, incluindo seus integrantes e código de convite.")
+    @ApiResponses(
+        value = [
+            SwaggerResponse(responseCode = "200", description = "Casa encontrada"),
+            SwaggerResponse(responseCode = "403", description = "Acesso negado: usuário não é membro"),
+            SwaggerResponse(responseCode = "404", description = "Casa não encontrada")
+        ]
+    )
+    @GetMapping("/{id}")
+    fun getHouseholdById(
+        @AuthenticationPrincipal jwt: Jwt,
+        @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String
+    ): ApiResponse<HouseholdDetailResponseDto> {
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
+        logger.info("[Households] User {} requested details for household {}", userId, id)
+        val result = householdService.getHouseholdById(id, userId)
         return ApiResponse.ok(result)
     }
 
@@ -118,8 +138,8 @@ class HouseholdController(
         return ApiResponse.ok(result, "Joined household successfully.")
     }
 
-    @Operation(summary = "Sair de uma casa compartilhada", description = "Remove o vínculo do usuário com a casa indicada.")
-    @PostMapping("/{id}/leave")
+    @Operation(summary = "Sair de uma casa compartilhada", description = "Remove o vínculo do usuário com a casa indicada. Suporta POST e DELETE.")
+    @RequestMapping(value = ["/{id}/leave"], method = [RequestMethod.POST, RequestMethod.DELETE])
     fun leaveHousehold(
         @AuthenticationPrincipal jwt: Jwt,
         @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String
@@ -130,7 +150,7 @@ class HouseholdController(
     }
 
     @Operation(summary = "Regenerar código de convite da casa", description = "Apenas o proprietário (OWNER) pode regenerar o código, invalidando o anterior.")
-    @PostMapping("/{id}/invite-code/regenerate")
+    @PostMapping(value = ["/{id}/invite-code/regenerate", "/{id}/regenerate-invite-code"])
     fun regenerateInviteCode(
         @AuthenticationPrincipal jwt: Jwt,
         @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String

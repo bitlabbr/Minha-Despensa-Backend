@@ -180,4 +180,42 @@ class HouseholdServiceTest {
             householdService.regenerateInviteCode("house-1", "user-2")
         }
     }
+
+    @Test
+    fun `getHouseholdById should return detail DTO when user is member`() {
+        val household = HouseholdEntity(id = "house-1", name = "Minha Casa", inviteCode = "CASA-12345678", ownerId = "user-1")
+        val member = HouseholdMemberEntity(householdId = "house-1", userId = "user-1", role = HouseholdRole.OWNER)
+        whenever(householdRepository.findById("house-1")).thenReturn(Optional.of(household))
+        whenever(householdMemberRepository.findByHouseholdIdAndUserId("house-1", "user-1")).thenReturn(Optional.of(member))
+        whenever(householdMemberRepository.findByHouseholdId("house-1")).thenReturn(listOf(member))
+        whenever(userRepository.findAllById(listOf("user-1"))).thenReturn(listOf(UserEntity(id = "user-1", name = "Willian", email = "willian@test.com")))
+
+        val result = householdService.getHouseholdById("house-1", "user-1")
+
+        assertNotNull(result)
+        assertEquals("house-1", result.id)
+        assertEquals("Minha Casa", result.name)
+        assertEquals(1, result.members.size)
+        assertEquals("Willian", result.members[0].name)
+    }
+
+    @Test
+    fun `getHouseholdById should throw ResourceNotFoundException when household does not exist`() {
+        whenever(householdRepository.findById("house-nonexistent")).thenReturn(Optional.empty())
+
+        assertThrows<ResourceNotFoundException> {
+            householdService.getHouseholdById("house-nonexistent", "user-1")
+        }
+    }
+
+    @Test
+    fun `getHouseholdById should throw ForbiddenException when user is not member`() {
+        val household = HouseholdEntity(id = "house-1", name = "Minha Casa", inviteCode = "CASA-12345678", ownerId = "user-2")
+        whenever(householdRepository.findById("house-1")).thenReturn(Optional.of(household))
+        whenever(householdMemberRepository.findByHouseholdIdAndUserId("house-1", "user-1")).thenReturn(Optional.empty())
+
+        assertThrows<ForbiddenException> {
+            householdService.getHouseholdById("house-1", "user-1")
+        }
+    }
 }

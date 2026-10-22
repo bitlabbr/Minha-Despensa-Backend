@@ -96,11 +96,12 @@ com.bitlabbr.minhadespensa
 | Método | Endpoint | Descrição |
 | :--- | :--- | :--- |
 | `GET` | `/api/v1/households` | Lista todas as casas em que o usuário autenticado é membro |
+| `GET` | `/api/v1/households/{id}` | Retorna os detalhes e integrantes de uma casa específica |
 | `POST` | `/api/v1/households` | Cria uma nova casa e define o usuário como `OWNER` |
 | `PUT` | `/api/v1/households/{id}` | Renomeia uma casa (requer privilégio de membro) |
 | `POST` | `/api/v1/households/join` | Ingressa em uma casa via código de convite `CASA-XXXXXXXX` |
-| `POST` | `/api/v1/households/{id}/leave` | Sai de uma casa compartilhada |
-| `POST` | `/api/v1/households/{id}/invite-code/regenerate` | Regenera o código de convite (apenas `OWNER`) |
+| `POST`, `DELETE` | `/api/v1/households/{id}/leave` | Sai de uma casa compartilhada |
+| `POST` | `/api/v1/households/{id}/invite-code/regenerate`, `/{id}/regenerate-invite-code` | Regenera o código de convite (apenas `OWNER`) |
 | `DELETE` | `/api/v1/households/{id}/members/{userId}` | Remove um membro da casa (apenas `OWNER`) |
 
 ### 3.3. Sincronização Bidirecional v2.1 (`/api/v1/sync`) — Requer Bearer Auth + `X-Household-Id`

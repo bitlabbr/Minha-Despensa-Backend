@@ -27,6 +27,7 @@ import com.bitlabbr.minhadespensa.common.exception.GlobalExceptionHandler
 import com.bitlabbr.minhadespensa.modules.auth.config.SecurityConfig
 import com.bitlabbr.minhadespensa.modules.household.dto.HouseholdDetailResponseDto
 import com.bitlabbr.minhadespensa.modules.household.dto.HouseholdMemberResponseDto
+import com.bitlabbr.minhadespensa.modules.household.dto.InviteCodeResponseDto
 import com.bitlabbr.minhadespensa.modules.household.service.HouseholdService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -39,6 +40,7 @@ import org.springframework.http.MediaType
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -150,5 +152,66 @@ class HouseholdControllerTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.inviteCode").value("CASA-SERRA001"))
+    }
+
+    @Test
+    fun `GET household by id should return 200 with household detail`() {
+        val mockHousehold = HouseholdDetailResponseDto(
+            id = "house-123",
+            name = "Casa da Praia",
+            inviteCode = "CASA-PRAIA001",
+            ownerId = "user-1",
+            syncVersion = 1L,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+
+        whenever(householdService.getHouseholdById("house-123", "user-1")).thenReturn(mockHousehold)
+
+        mockMvc.perform(
+            get("/api/v1/households/house-123")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.id").value("house-123"))
+            .andExpect(jsonPath("$.data.name").value("Casa da Praia"))
+    }
+
+    @Test
+    fun `leaveHousehold should accept both POST and DELETE methods`() {
+        mockMvc.perform(
+            post("/api/v1/households/house-123/leave")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+
+        mockMvc.perform(
+            delete("/api/v1/households/house-123/leave")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+    }
+
+    @Test
+    fun `regenerateInviteCode should accept both standard and hyphenated routes`() {
+        val mockResponse = InviteCodeResponseDto(inviteCode = "CASA-NEWCODE1")
+        whenever(householdService.regenerateInviteCode("house-123", "user-1")).thenReturn(mockResponse)
+
+        mockMvc.perform(
+            post("/api/v1/households/house-123/invite-code/regenerate")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.data.inviteCode").value("CASA-NEWCODE1"))
+
+        mockMvc.perform(
+            post("/api/v1/households/house-123/regenerate-invite-code")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.data.inviteCode").value("CASA-NEWCODE1"))
     }
 }

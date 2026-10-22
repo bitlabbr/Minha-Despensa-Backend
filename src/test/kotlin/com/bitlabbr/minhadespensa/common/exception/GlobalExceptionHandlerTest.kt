@@ -83,4 +83,16 @@ class GlobalExceptionHandlerTest {
         assertEquals(409, body?.status)
         assertEquals("EAN já cadastrado", body?.message)
     }
+
+    @Test
+    fun `should handle HttpRequestMethodNotSupportedException returning 405 Method Not Allowed`() {
+        val ex = org.springframework.web.HttpRequestMethodNotSupportedException("GET", listOf("POST", "PUT"))
+        val response = handler.handleMethodNotSupported(ex, request)
+
+        assertEquals(HttpStatus.METHOD_NOT_ALLOWED, response.statusCode)
+        val body = response.body
+        assertNotNull(body)
+        assertEquals(405, body?.status)
+        assertEquals("Request method 'GET' not supported.", body?.message)
+    }
 }

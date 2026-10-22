@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -183,6 +184,21 @@ class GlobalExceptionHandler {
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupported(
+        ex: HttpRequestMethodNotSupportedException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        logger.warn("[405 Method Not Allowed] at {}: method {} is not supported for this endpoint", request.requestURI, ex.method)
+        val errorResponse = ErrorResponse(
+            status = HttpStatus.METHOD_NOT_ALLOWED.value(),
+            error = HttpStatus.METHOD_NOT_ALLOWED.reasonPhrase,
+            message = "Request method '${ex.method}' not supported.",
+            path = request.requestURI
+        )
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(errorResponse)
     }
 
     @ExceptionHandler(Exception::class)

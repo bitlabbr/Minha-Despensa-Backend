@@ -102,6 +102,21 @@ class HouseholdService(
         }
     }
 
+    @Transactional(readOnly = true)
+    fun getHouseholdById(householdId: String, userId: String): HouseholdDetailResponseDto {
+        val cleanHouseholdId = householdId.trim()
+        val household = householdRepository.findById(cleanHouseholdId)
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", cleanHouseholdId) }
+
+        householdMemberRepository.findByHouseholdIdAndUserId(cleanHouseholdId, userId)
+            .orElseThrow {
+                ForbiddenException("Access denied: user is not a member of household '$cleanHouseholdId'")
+            }
+
+        val members = loadMembersForHousehold(household.id)
+        return mapToDetailDto(household, members)
+    }
+
     @Transactional
     fun createHousehold(userId: String, dto: CreateHouseholdRequestDto): HouseholdDetailResponseDto {
         val user = userRepository.findById(userId)
