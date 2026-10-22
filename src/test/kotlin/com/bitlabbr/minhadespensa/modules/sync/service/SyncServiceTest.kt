@@ -130,6 +130,7 @@ class SyncServiceTest {
         // Mock verificação de existência do produto para filhos
         whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-canonical"))
             .thenReturn(Optional.of(prodEntity))
+        whenever(shoppingListService.listExists(householdId, "list-1")).thenReturn(true)
 
         val request = SyncPushRequestDto(
             categories = listOf(ProductCategorySyncDto(id = "cat-alias", name = "Mercearia")),
@@ -187,6 +188,31 @@ class SyncServiceTest {
         assertEquals(1, response.rejected.size)
         assertEquals("PANTRY_ITEM", response.rejected[0].entityType)
         assertEquals("pantry-ghost", response.rejected[0].id)
+    }
+
+    @Test
+    fun `push should record rejected shopping item if listId does not exist or referenced product missing`() {
+        whenever(householdService.nextSyncVersion(householdId)).thenReturn(10L)
+        whenever(shoppingListService.listExists(householdId, "missing-list")).thenReturn(false)
+        whenever(shoppingListService.listExists(householdId, "valid-list")).thenReturn(true)
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "missing-prod")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "missing-prod")).thenReturn(Optional.empty())
+
+        val request = SyncPushRequestDto(
+            shoppingItems = listOf(
+                ShoppingItemRequestDto(id = "item-orphan", listId = "missing-list", rawText = "Maçã"),
+                ShoppingItemRequestDto(id = "item-bad-prod", listId = "valid-list", productId = "missing-prod")
+            )
+        )
+
+        val response = syncService.push(householdId, request)
+
+        assertEquals(0, response.totalProcessed)
+        assertEquals(2, response.rejected.size)
+        assertEquals("SHOPPING_ITEM", response.rejected[0].entityType)
+        assertEquals("item-orphan", response.rejected[0].id)
+        assertEquals("SHOPPING_ITEM", response.rejected[1].entityType)
+        assertEquals("item-bad-prod", response.rejected[1].id)
     }
 
     @Test

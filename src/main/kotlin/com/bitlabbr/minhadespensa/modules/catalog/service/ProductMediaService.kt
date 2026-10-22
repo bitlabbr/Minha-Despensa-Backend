@@ -27,6 +27,7 @@ import com.bitlabbr.minhadespensa.common.exception.InvalidRequestException
 import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductMediaEntity
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductMediaRepository
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductRepository
+import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -35,7 +36,8 @@ import java.security.MessageDigest
 @Service
 class ProductMediaService(
     private val productMediaRepository: ProductMediaRepository,
-    private val productRepository: ProductRepository
+    private val productRepository: ProductRepository,
+    private val aliasRepository: EntityIdAliasRepository
 ) {
 
     private val logger = LoggerFactory.getLogger(ProductMediaService::class.java)
@@ -53,10 +55,11 @@ class ProductMediaService(
             throw InvalidRequestException("Image exceeds maximum allowed size of 200KB (received: ${bytes.size / 1024}KB)")
         }
 
+        val canonicalProductId = aliasRepository.findCanonicalId(householdId, "PRODUCT", productId) ?: productId
         val sha256Hash = computeSha256(bytes)
         val now = System.currentTimeMillis()
 
-        val existingOpt = productMediaRepository.findByHouseholdIdAndProductId(householdId, productId)
+        val existingOpt = productMediaRepository.findByHouseholdIdAndProductId(householdId, canonicalProductId)
         val entity = if (existingOpt.isPresent) {
             val media = existingOpt.get()
             media.contentType = contentType
@@ -68,7 +71,7 @@ class ProductMediaService(
         } else {
             ProductMediaEntity(
                 householdId = householdId,
-                productId = productId,
+                productId = canonicalProductId,
                 contentType = contentType,
                 sha256Hash = sha256Hash,
                 imageBytes = bytes,
@@ -80,7 +83,7 @@ class ProductMediaService(
         val saved = productMediaRepository.save(entity)
 
         // Atualiza o imageHash no produto correspondente se ele existir
-        val productOpt = productRepository.findByHouseholdIdAndId(householdId, productId)
+        val productOpt = productRepository.findByHouseholdIdAndId(householdId, canonicalProductId)
         if (productOpt.isPresent) {
             val product = productOpt.get()
             product.imageHash = sha256Hash
@@ -89,26 +92,29 @@ class ProductMediaService(
             productRepository.save(product)
         }
 
-        logger.info("Media saved for product $productId in household $householdId (hash=$sha256Hash, size=${bytes.size} bytes)")
+        logger.info("Media saved for product $productId (canonical=$canonicalProductId) in household $householdId (hash=$sha256Hash, size=${bytes.size} bytes)")
         return saved
     }
 
     @Transactional(readOnly = true)
     fun getMedia(householdId: String, productId: String): ProductMediaEntity? {
-        return productMediaRepository.findByHouseholdIdAndProductId(householdId, productId).orElse(null)
+        val canonicalProductId = aliasRepository.findCanonicalId(householdId, "PRODUCT", productId) ?: productId
+        return productMediaRepository.findByHouseholdIdAndProductId(householdId, canonicalProductId).orElse(null)
     }
 
     @Transactional
-    fun deleteMedia(householdId: String, productId: String) {
-        productMediaRepository.deleteByHouseholdIdAndProductId(householdId, productId)
-        val productOpt = productRepository.findByHouseholdIdAndId(householdId, productId)
+    fun deleteMedia(householdId: String, productId: String, syncVersion: Long = 0L) {
+        val canonicalProductId = aliasRepository.findCanonicalId(householdId, "PRODUCT", productId) ?: productId
+        productMediaRepository.deleteByHouseholdIdAndProductId(householdId, canonicalProductId)
+        val productOpt = productRepository.findByHouseholdIdAndId(householdId, canonicalProductId)
         if (productOpt.isPresent) {
             val product = productOpt.get()
             product.imageHash = null
+            product.serverVersion = syncVersion
             product.updatedAt = System.currentTimeMillis()
             productRepository.save(product)
         }
-        logger.info("Media removed for product $productId in household $householdId")
+        logger.info("Media removed for product $productId (canonical=$canonicalProductId) in household $householdId (version=$syncVersion)")
     }
 
     private fun computeSha256(bytes: ByteArray): String {

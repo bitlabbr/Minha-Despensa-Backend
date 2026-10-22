@@ -123,13 +123,31 @@ class SyncService(
         request.shoppingItems.forEach { itemDto ->
             val clamped = itemDto.copy(updatedAt = clamp(itemDto.updatedAt))
             val effectiveProductId = resolveEffectiveProductId(clamped.productId)
-            val itemToSave = if (effectiveProductId != clamped.productId) {
-                clamped.copy(productId = effectiveProductId)
+            if (!shoppingListService.listExists(householdId, clamped.listId)) {
+                rejected.add(
+                    SyncRejectedItemDto(
+                        entityType = "SHOPPING_ITEM",
+                        id = clamped.id ?: "unknown",
+                        reason = "Lista de compras com ID '${clamped.listId}' não encontrada na casa $householdId"
+                    )
+                )
+            } else if (effectiveProductId != null && !productExists(effectiveProductId)) {
+                rejected.add(
+                    SyncRejectedItemDto(
+                        entityType = "SHOPPING_ITEM",
+                        id = clamped.id ?: "unknown",
+                        reason = "Produto com ID '${clamped.productId}' não encontrado na casa $householdId"
+                    )
+                )
             } else {
-                clamped
+                val itemToSave = if (effectiveProductId != clamped.productId) {
+                    clamped.copy(productId = effectiveProductId)
+                } else {
+                    clamped
+                }
+                shoppingListService.saveItem(householdId, itemToSave, syncVersion)
+                count++
             }
-            shoppingListService.saveItem(householdId, itemToSave, syncVersion)
-            count++
         }
 
         // 6. Passo 5 - Itens da Despensa (Estoque)

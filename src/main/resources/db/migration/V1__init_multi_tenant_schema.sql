@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
     PRIMARY KEY (household_id, id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_household_name ON product_categories(household_id, normalized_name);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_household_name ON product_categories(household_id, normalized_name) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_categories_server_version ON product_categories(household_id, server_version);
 
 -- 5. Catálogo Mestre de Produtos
@@ -95,8 +95,8 @@ CREATE TABLE IF NOT EXISTS catalog_products (
     PRIMARY KEY (household_id, id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_products_household_ean ON catalog_products(household_id, ean) WHERE ean IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS ux_products_household_name_unit ON catalog_products(household_id, normalized_name, measure_unit) WHERE ean IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_products_household_ean ON catalog_products(household_id, ean) WHERE ean IS NOT NULL AND is_deleted = FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_products_household_name_unit ON catalog_products(household_id, normalized_name, measure_unit) WHERE ean IS NULL AND is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_products_server_version ON catalog_products(household_id, server_version);
 
 -- 6. Mídia de Produtos (Fotos / Blobs WebP)

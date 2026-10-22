@@ -36,8 +36,10 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -159,5 +161,42 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.accessToken").value("new-access-token"))
             .andExpect(jsonPath("$.data.refreshToken").value("new-refresh-token"))
+    }
+
+    @Test
+    fun `GET me without auth should return 401 Unauthorized`() {
+        mockMvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `GET me with valid JWT should return 200 OK and user summary`() {
+        val userSummary = UserSummaryDto(id = "user-1", name = "Willian Santos", email = "willian@test.com", defaultHouseholdId = "house-1")
+        whenever(authService.getCurrentUser("user-1")).thenReturn(userSummary)
+
+        mockMvc.perform(
+            get("/api/v1/auth/me")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.id").value("user-1"))
+            .andExpect(jsonPath("$.data.email").value("willian@test.com"))
+    }
+
+    @Test
+    fun `POST logout without auth should return 401 Unauthorized`() {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+            .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `POST logout with valid JWT should return 200 OK`() {
+        mockMvc.perform(
+            post("/api/v1/auth/logout")
+                .with(jwt().jwt { it.subject("user-1") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
     }
 }

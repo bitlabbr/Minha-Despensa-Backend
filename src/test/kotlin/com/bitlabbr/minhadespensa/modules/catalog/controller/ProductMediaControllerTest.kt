@@ -33,6 +33,7 @@ import com.bitlabbr.minhadespensa.modules.household.service.HouseholdService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -41,6 +42,7 @@ import org.springframework.http.MediaType
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
@@ -136,5 +138,22 @@ class ProductMediaControllerTest {
                 .header("If-None-Match", "abc123hash")
         )
             .andExpect(status().isNotModified)
+    }
+
+    @Test
+    fun `DELETE media should delete image and return success`() {
+        whenever(householdService.requireHouseholdAccess("user-1", "house-1"))
+            .thenReturn(HouseholdContext("house-1", "user-1", HouseholdRole.MEMBER))
+        whenever(householdService.nextSyncVersion("house-1")).thenReturn(4L)
+
+        mockMvc.perform(
+            delete("/api/v1/media/products/prod-1")
+                .with(jwt().jwt { it.subject("user-1") })
+                .header("X-Household-Id", "house-1")
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+
+        verify(productMediaService).deleteMedia("house-1", "prod-1", 4L)
     }
 }

@@ -28,6 +28,8 @@ import com.bitlabbr.minhadespensa.common.util.DeterministicIdUtils
 import com.bitlabbr.minhadespensa.modules.catalog.domain.MeasureUnit
 import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductRequestDto
 import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductEntity
+import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductMediaEntity
+import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductMediaRepository
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductRepository
 import com.bitlabbr.minhadespensa.modules.sync.entity.EntityIdAliasEntity
 import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
@@ -49,6 +51,7 @@ class ProductServiceTest {
 
     private lateinit var productRepository: ProductRepository
     private lateinit var aliasRepository: EntityIdAliasRepository
+    private lateinit var productMediaRepository: ProductMediaRepository
     private lateinit var productService: ProductService
 
     private val householdId = "house-123"
@@ -57,7 +60,8 @@ class ProductServiceTest {
     fun setUp() {
         productRepository = mock()
         aliasRepository = mock()
-        productService = ProductService(productRepository, aliasRepository)
+        productMediaRepository = mock()
+        productService = ProductService(productRepository, aliasRepository, productMediaRepository)
     }
 
     @Test
@@ -211,6 +215,92 @@ class ProductServiceTest {
         assertEquals("canonical-banana", result.canonicalId)
         assertEquals("device-banana-id", result.remappedFromId)
         verify(aliasRepository).save(any<EntityIdAliasEntity>())
+    }
+
+    @Test
+    fun `upsertForSync should preserve remappedFromId when rawTargetId is already aliased`() {
+        val canonical = ProductEntity(
+            householdId = householdId,
+            id = "canonical-prod",
+            ean = "7891000100103",
+            name = "Café Melitta",
+            updatedAt = 2000L
+        )
+
+        val incomingDto = ProductRequestDto(
+            id = "aliased-prod-id",
+            ean = "7891000100103",
+            name = "Café Melitta",
+            updatedAt = 3000L
+        )
+
+        // rawTargetId ("aliased-prod-id") resolves to canonical-prod
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "aliased-prod-id"))
+            .thenReturn("canonical-prod")
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "canonical-prod"))
+            .thenReturn(Optional.of(canonical))
+        whenever(productRepository.save(canonical)).thenReturn(canonical)
+
+        val result = productService.upsertForSync(householdId, incomingDto, syncVersion = 25L)
+
+        assertEquals("canonical-prod", result.canonicalId)
+        assertEquals("aliased-prod-id", result.remappedFromId)
+    }
+
+    @Test
+    fun `upsertForSync should disambiguate obsolete product normalizedName and migrate media`() {
+        val canonical = ProductEntity(
+            householdId = householdId,
+            id = "canonical-prod",
+            ean = "7891000100103",
+            name = "Açúcar União",
+            normalizedName = "acucar uniao",
+            imageHash = null,
+            updatedAt = 2000L
+        )
+        val obsolete = ProductEntity(
+            householdId = householdId,
+            id = "obsolete-prod",
+            ean = "7891000100103",
+            name = "Açúcar União",
+            normalizedName = "acucar uniao",
+            updatedAt = 1000L
+        )
+        val obsoleteMedia = ProductMediaEntity(
+            householdId = householdId,
+            productId = "obsolete-prod",
+            sha256Hash = "media-hash-123",
+            contentType = "image/webp",
+            imageBytes = byteArrayOf(1, 2, 3)
+        )
+
+        val incomingDto = ProductRequestDto(
+            id = "obsolete-prod",
+            ean = "7891000100103",
+            name = "Açúcar União",
+            updatedAt = 2500L
+        )
+
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "obsolete-prod")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "obsolete-prod")).thenReturn(Optional.of(obsolete))
+        whenever(productRepository.findByHouseholdIdAndEan(householdId, "7891000100103")).thenReturn(Optional.of(canonical))
+        whenever(productRepository.save(canonical)).thenReturn(canonical)
+        whenever(productRepository.save(obsolete)).thenReturn(obsolete)
+        whenever(productMediaRepository.findByHouseholdIdAndProductId(householdId, "obsolete-prod"))
+            .thenReturn(Optional.of(obsoleteMedia))
+        whenever(productMediaRepository.findByHouseholdIdAndProductId(householdId, "canonical-prod"))
+            .thenReturn(Optional.empty())
+
+        val result = productService.upsertForSync(householdId, incomingDto, syncVersion = 30L)
+
+        assertEquals("canonical-prod", result.canonicalId)
+        assertEquals("obsolete-prod", result.remappedFromId)
+        assertTrue(obsolete.isDeleted)
+        assertNull(obsolete.ean)
+        assertTrue(obsolete.normalizedName.contains("#deleted#obsolete-prod"))
+        verify(productMediaRepository).deleteByHouseholdIdAndProductId(householdId, "obsolete-prod")
+        verify(productMediaRepository).save(any<ProductMediaEntity>())
+        assertEquals("media-hash-123", canonical.imageHash)
     }
 
     @Test

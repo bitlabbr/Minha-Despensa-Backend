@@ -104,8 +104,9 @@ class ProductMediaController(
     ): ApiResponse<Unit> {
         val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.requireHouseholdAccess(userId, householdId)
+        val syncVersion = householdService.nextSyncVersion(householdId)
 
-        productMediaService.deleteMedia(householdId, productId)
+        productMediaService.deleteMedia(householdId, productId, syncVersion)
         return ApiResponse.ok("Image removed successfully.")
     }
 }

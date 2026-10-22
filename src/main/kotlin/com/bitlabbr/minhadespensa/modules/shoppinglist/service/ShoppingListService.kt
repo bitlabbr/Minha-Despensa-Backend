@@ -61,6 +61,11 @@ class ShoppingListService(
         return ShoppingListResponseDto.fromEntity(list, items)
     }
 
+    @Transactional(readOnly = true)
+    fun listExists(householdId: String, listId: String): Boolean {
+        return shoppingListRepository.findByHouseholdIdAndId(householdId, listId).isPresent
+    }
+
     @Transactional
     fun saveList(householdId: String, dto: ShoppingListRequestDto, syncVersion: Long = 0L): ShoppingListResponseDto {
         val targetId = dto.id ?: UUID.randomUUID().toString()

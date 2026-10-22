@@ -30,17 +30,22 @@ import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductRequestDto
 import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductResponseDto
 import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductUpsertResult
 import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductEntity
+import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductMediaEntity
+import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductMediaRepository
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductRepository
 import com.bitlabbr.minhadespensa.modules.sync.entity.EntityIdAliasEntity
 import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class ProductService(
     private val productRepository: ProductRepository,
-    private val aliasRepository: EntityIdAliasRepository
+    private val aliasRepository: EntityIdAliasRepository,
+    @Autowired(required = false)
+    private val productMediaRepository: ProductMediaRepository? = null
 ) {
     private val logger = LoggerFactory.getLogger(ProductService::class.java)
 
@@ -119,11 +124,12 @@ class ProductService(
         }
 
         val incomingUpdatedAt = dto.updatedAt ?: serverNow
+        val effectiveRemappedFromId = if (rawTargetId != canonical?.id) rawTargetId else null
 
         return if (canonical != null) {
-            if (canonical.id != targetId) {
+            if (canonical.id != targetId || rawTargetId != canonical.id) {
                 // Colisão / Deduplicação: o ID recebido aponta para um canônico existente com outro ID
-                logger.info("Deduplicating product $targetId to canonical ${canonical.id} in household $householdId")
+                logger.info("Deduplicating product $targetId (raw=$rawTargetId) to canonical ${canonical.id} in household $householdId")
                 aliasRepository.save(
                     EntityIdAliasEntity(
                         householdId = householdId,
@@ -132,7 +138,7 @@ class ProductService(
                         canonicalId = canonical.id
                     )
                 )
-                if (rawTargetId != targetId) {
+                if (rawTargetId != targetId && rawTargetId != canonical.id) {
                     aliasRepository.save(
                         EntityIdAliasEntity(
                             householdId = householdId,
@@ -143,14 +149,40 @@ class ProductService(
                     )
                 }
 
-                // Se havia uma linha sob targetId no banco, marca como excluída e zera EAN
+                // Se havia uma linha sob targetId no banco, marca como excluída e desambigua chaves únicas
                 if (existingByIdOpt.isPresent && existingByIdOpt.get().id != canonical.id) {
                     val obsolete = existingByIdOpt.get()
+                    val obsoleteId = obsolete.id
                     obsolete.isDeleted = true
                     obsolete.ean = null
+                    obsolete.normalizedName = "${obsolete.normalizedName}#deleted#${obsolete.id}"
                     obsolete.updatedAt = serverNow
                     obsolete.serverVersion = syncVersion
                     productRepository.save(obsolete)
+
+                    // Migra foto de produto obsoleto para o canônico se o canônico ainda não possui mídia
+                    if (productMediaRepository != null) {
+                        val obsoleteMediaOpt = productMediaRepository.findByHouseholdIdAndProductId(householdId, obsoleteId)
+                        if (obsoleteMediaOpt.isPresent) {
+                            val canonicalMediaOpt = productMediaRepository.findByHouseholdIdAndProductId(householdId, canonical.id)
+                            if (canonicalMediaOpt.isEmpty) {
+                                val oldMedia = obsoleteMediaOpt.get()
+                                productMediaRepository.deleteByHouseholdIdAndProductId(householdId, obsoleteId)
+                                productMediaRepository.save(
+                                    ProductMediaEntity(
+                                        householdId = householdId,
+                                        productId = canonical.id,
+                                        contentType = oldMedia.contentType,
+                                        sha256Hash = oldMedia.sha256Hash,
+                                        imageBytes = oldMedia.imageBytes,
+                                        updatedAt = serverNow,
+                                        serverVersion = syncVersion
+                                    )
+                                )
+                                canonical.imageHash = oldMedia.sha256Hash
+                            }
+                        }
+                    }
                 }
 
                 // Aplica LWW no registro canônico
@@ -174,7 +206,7 @@ class ProductService(
                     logger.debug("LWW discarded update on ${canonical.id}: server=${canonical.updatedAt} > incoming=$incomingUpdatedAt")
                     canonical
                 }
-                ProductUpsertResult(entity = saved, canonicalId = canonical.id, remappedFromId = targetId)
+                ProductUpsertResult(entity = saved, canonicalId = canonical.id, remappedFromId = effectiveRemappedFromId)
             } else {
                 // Atualização normal do mesmo registro
                 val saved = if (incomingUpdatedAt >= canonical.updatedAt) {
@@ -197,7 +229,7 @@ class ProductService(
                     logger.debug("LWW discarded update on ${canonical.id}: server=${canonical.updatedAt} > incoming=$incomingUpdatedAt")
                     canonical
                 }
-                ProductUpsertResult(entity = saved, canonicalId = canonical.id, remappedFromId = null)
+                ProductUpsertResult(entity = saved, canonicalId = canonical.id, remappedFromId = effectiveRemappedFromId)
             }
         } else {
             // Criação de novo produto no catálogo da casa

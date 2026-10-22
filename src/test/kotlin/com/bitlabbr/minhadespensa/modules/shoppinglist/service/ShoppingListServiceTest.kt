@@ -190,4 +190,14 @@ class ShoppingListServiceTest {
         assertEquals(10L, result.serverVersion)
         assertFalse(result.isDeleted)
     }
+
+    @Test
+    fun `listExists should return true when list is present and false otherwise`() {
+        val list = ShoppingListEntity(householdId = householdId, id = "list-1", name = "Lista")
+        whenever(shoppingListRepository.findByHouseholdIdAndId(householdId, "list-1")).thenReturn(Optional.of(list))
+        whenever(shoppingListRepository.findByHouseholdIdAndId(householdId, "missing-list")).thenReturn(Optional.empty())
+
+        assertTrue(shoppingListService.listExists(householdId, "list-1"))
+        assertFalse(shoppingListService.listExists(householdId, "missing-list"))
+    }
 }

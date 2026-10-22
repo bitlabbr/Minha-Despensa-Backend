@@ -25,7 +25,7 @@ com.bitlabbr.minhadespensa
 ├── common/                  # Componentes compartilhados e infraestrutura transversal
 │   ├── config/              # Configurações de OpenAPI/Swagger e CORS (WebConfig)
 │   ├── dto/                 # Envelopes ApiResponse<T> e ErrorResponse padronizado
-│   ├── entity/              # BaseSyncEntity (id, updatedAt, isDeleted para CRDT LWW)
+│   ├── entity/              # HouseholdScopedSyncEntity (multi-tenant, updatedAt, serverVersion, isDeleted)
 │   └── exception/           # Hierarquia de exceções de domínio e GlobalExceptionHandler
 ├── controller/              # Endpoints utilitários e diagnósticos (TestController)
 └── modules/                 # Módulos funcionais de negócio

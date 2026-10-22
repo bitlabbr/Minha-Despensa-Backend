@@ -47,52 +47,69 @@ class ProductCategoryService(
         val aliasOpt = aliasRepository.findByHouseholdIdAndEntityTypeAndAliasId(householdId, "CATEGORY", dto.id)
         val targetId = if (aliasOpt.isPresent) aliasOpt.get().canonicalId else dto.id
 
-        // 2. Busca por ID direto
+        // 2. Busca por nome normalizado (chave natural canônica) e por ID
+        val byNameOpt = categoryRepository.findByHouseholdIdAndNormalizedName(householdId, normalizedName)
         val byIdOpt = categoryRepository.findByHouseholdIdAndId(householdId, targetId)
-        if (byIdOpt.isPresent) {
-            val existing = byIdOpt.get()
-            if (dto.updatedAt >= existing.updatedAt) {
-                existing.name = dto.name.trim()
-                existing.normalizedName = normalizedName
-                existing.isDefault = dto.isDefault
-                existing.updatedAt = dto.updatedAt
-                existing.serverVersion = syncVersion
-                existing.isDeleted = dto.isDeleted
-                categoryRepository.save(existing)
-            }
-            return ProductCategoryUpsertResult(entity = existing, canonicalId = existing.id)
+
+        val canonical = if (byNameOpt.isPresent) {
+            byNameOpt.get()
+        } else if (byIdOpt.isPresent) {
+            byIdOpt.get()
+        } else {
+            null
         }
 
-        // 3. Busca por nome normalizado (deduplicação canônica)
-        val byNameOpt = categoryRepository.findByHouseholdIdAndNormalizedName(householdId, normalizedName)
-        if (byNameOpt.isPresent) {
-            val existing = byNameOpt.get()
-            if (existing.id != dto.id) {
+        if (canonical != null) {
+            val isRemapped = canonical.id != dto.id
+            if (isRemapped) {
                 aliasRepository.save(
                     EntityIdAliasEntity(
                         householdId = householdId,
                         entityType = "CATEGORY",
                         aliasId = dto.id,
-                        canonicalId = existing.id
+                        canonicalId = canonical.id
                     )
                 )
+                if (targetId != canonical.id && targetId != dto.id) {
+                    aliasRepository.save(
+                        EntityIdAliasEntity(
+                            householdId = householdId,
+                            entityType = "CATEGORY",
+                            aliasId = targetId,
+                            canonicalId = canonical.id
+                        )
+                    )
+                }
+
+                // Se existia uma linha distinta sob targetId, marca como excluída e desambigua o nome
+                if (byIdOpt.isPresent && byIdOpt.get().id != canonical.id) {
+                    val obsolete = byIdOpt.get()
+                    obsolete.isDeleted = true
+                    obsolete.normalizedName = "${obsolete.normalizedName}#deleted#${obsolete.id}"
+                    obsolete.updatedAt = System.currentTimeMillis()
+                    obsolete.serverVersion = syncVersion
+                    categoryRepository.save(obsolete)
+                }
             }
-            if (dto.updatedAt >= existing.updatedAt) {
-                existing.name = dto.name.trim()
-                existing.isDefault = dto.isDefault
-                existing.updatedAt = dto.updatedAt
-                existing.serverVersion = syncVersion
-                existing.isDeleted = dto.isDeleted
-                categoryRepository.save(existing)
+
+            if (dto.updatedAt >= canonical.updatedAt) {
+                canonical.name = dto.name.trim()
+                canonical.normalizedName = normalizedName
+                canonical.isDefault = dto.isDefault
+                canonical.updatedAt = dto.updatedAt
+                canonical.serverVersion = syncVersion
+                canonical.isDeleted = dto.isDeleted
+                categoryRepository.save(canonical)
             }
+
             return ProductCategoryUpsertResult(
-                entity = existing,
-                aliasId = if (existing.id != dto.id) dto.id else null,
-                canonicalId = existing.id
+                entity = canonical,
+                aliasId = if (isRemapped) dto.id else null,
+                canonicalId = canonical.id
             )
         }
 
-        // 4. Cria nova categoria
+        // 3. Cria nova categoria
         val newCategory = ProductCategoryEntity(
             householdId = householdId,
             id = targetId,
@@ -104,7 +121,11 @@ class ProductCategoryService(
             isDeleted = dto.isDeleted
         )
         val saved = categoryRepository.save(newCategory)
-        return ProductCategoryUpsertResult(entity = saved, canonicalId = saved.id)
+        return ProductCategoryUpsertResult(
+            entity = saved,
+            aliasId = if (dto.id != saved.id) dto.id else null,
+            canonicalId = saved.id
+        )
     }
 
     @Transactional(readOnly = true)
