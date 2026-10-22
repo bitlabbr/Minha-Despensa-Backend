@@ -7,8 +7,25 @@ plugins {
 }
 
 group = "com.bitlabbr.minhadespensa"
-version = "0.0.1-SNAPSHOT"
+version = "2.0.0-SNAPSHOT"
 description = "Minha-Despensa-Backend"
+
+springBoot {
+    buildInfo {
+        properties {
+            val gitHash = try {
+                providers.exec {
+                    commandLine("git", "rev-parse", "--short", "HEAD")
+                }.standardOutput.asText.map { it.trim() }.getOrElse("unknown")
+            } catch (_: Exception) {
+                "unknown"
+            }
+            additional = mapOf(
+                "gitCommit" to gitHash
+            )
+        }
+    }
+}
 
 java {
     toolchain {
