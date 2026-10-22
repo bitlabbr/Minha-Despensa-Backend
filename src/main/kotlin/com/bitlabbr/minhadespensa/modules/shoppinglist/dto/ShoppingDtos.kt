@@ -27,6 +27,7 @@ import com.bitlabbr.minhadespensa.modules.shoppinglist.domain.ShoppingListStatus
 import com.bitlabbr.minhadespensa.modules.shoppinglist.domain.ShoppingListType
 import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingItemEntity
 import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingListEntity
+import com.fasterxml.jackson.annotation.JsonAlias
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -42,9 +43,11 @@ data class ShoppingListRequestDto(
     val name: String,
 
     @Schema(description = "Tipo da lista", example = "PLANNED")
+    @JsonAlias("listType")
     val type: ShoppingListType = ShoppingListType.PLANNED,
 
     @Schema(description = "Status da lista", example = "DRAFT")
+    @JsonAlias("listStatus")
     val status: ShoppingListStatus = ShoppingListStatus.DRAFT,
 
     @Schema(description = "Orçamento máximo estipulado em centavos", example = "50000")
