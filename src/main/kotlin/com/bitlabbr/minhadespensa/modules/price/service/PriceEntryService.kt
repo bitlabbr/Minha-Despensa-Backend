@@ -23,6 +23,7 @@
 
 package com.bitlabbr.minhadespensa.modules.price.service
 
+import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
 import com.bitlabbr.minhadespensa.modules.price.dto.PriceEntryRequestDto
 import com.bitlabbr.minhadespensa.modules.price.dto.PriceEntryResponseDto
 import com.bitlabbr.minhadespensa.modules.price.entity.PriceEntryEntity
@@ -39,49 +40,63 @@ class PriceEntryService(
     private val logger = LoggerFactory.getLogger(PriceEntryService::class.java)
 
     @Transactional(readOnly = true)
-    fun getPricesByProductId(productId: String): List<PriceEntryResponseDto> {
-        return priceEntryRepository.findAllByProductIdAndIsDeletedFalseOrderByUpdatedAtDesc(productId)
+    fun getPricesByProductId(householdId: String, productId: String): List<PriceEntryResponseDto> {
+        return priceEntryRepository.findByHouseholdIdAndProductIdAndIsDeletedFalseOrderByUpdatedAtDesc(householdId, productId)
             .map { PriceEntryResponseDto.fromEntity(it) }
     }
 
     @Transactional
-    fun savePrice(dto: PriceEntryRequestDto): PriceEntryResponseDto {
+    fun savePrice(householdId: String, dto: PriceEntryRequestDto, syncVersion: Long = 0L): PriceEntryResponseDto {
         val targetId = dto.id ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val incomingUpdatedAt = dto.updatedAt ?: now
 
-        val existingOpt = priceEntryRepository.findById(targetId)
+        val existingOpt = priceEntryRepository.findByHouseholdIdAndId(householdId, targetId)
 
         val entityToSave = if (existingOpt.isPresent) {
             val existing = existingOpt.get()
             if (incomingUpdatedAt >= existing.updatedAt) {
                 existing.productId = dto.productId
                 existing.priceInCents = dto.priceInCents
-                existing.storeName = dto.storeName
+                existing.storeName = dto.storeName ?: existing.storeName
                 existing.updatedAt = incomingUpdatedAt
-                existing.isDeleted = false
-                existing
+                existing.serverVersion = syncVersion
+                existing.isDeleted = dto.isDeleted
+                priceEntryRepository.save(existing)
             } else {
-                logger.info("Ignorando atualização do histórico de preço $targetId devido à regra LWW")
+                logger.debug("LWW ignorou atualização de preço $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
                 existing
             }
         } else {
-            PriceEntryEntity(
+            val newEntity = PriceEntryEntity(
+                householdId = householdId,
                 id = targetId,
                 productId = dto.productId,
                 priceInCents = dto.priceInCents,
-                storeName = dto.storeName,
+                storeName = dto.storeName ?: "Supermercado",
                 updatedAt = incomingUpdatedAt,
-                isDeleted = false
+                serverVersion = syncVersion,
+                isDeleted = dto.isDeleted
             )
+            priceEntryRepository.save(newEntity)
         }
 
-        val saved = priceEntryRepository.save(entityToSave)
-        return PriceEntryResponseDto.fromEntity(saved)
+        return PriceEntryResponseDto.fromEntity(entityToSave)
+    }
+
+    @Transactional
+    fun deletePrice(householdId: String, id: String, syncVersion: Long = 0L) {
+        val existing = priceEntryRepository.findByHouseholdIdAndId(householdId, id)
+            .orElseThrow { ResourceNotFoundException("Registro de preço com ID '$id' não encontrado.", "PriceEntry", id) }
+
+        existing.isDeleted = true
+        existing.updatedAt = System.currentTimeMillis()
+        existing.serverVersion = syncVersion
+        priceEntryRepository.save(existing)
     }
 
     @Transactional(readOnly = true)
-    fun getPricesModifiedSince(since: Long): List<PriceEntryEntity> {
-        return priceEntryRepository.findByUpdatedAtGreaterThan(since)
+    fun getPricesModifiedSince(householdId: String, sinceVersion: Long): List<PriceEntryEntity> {
+        return priceEntryRepository.findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(householdId, sinceVersion)
     }
 }

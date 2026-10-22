@@ -23,6 +23,8 @@
 
 package com.bitlabbr.minhadespensa.modules.catalog.repository
 
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
+import com.bitlabbr.minhadespensa.modules.catalog.domain.MeasureUnit
 import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductEntity
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -31,29 +33,56 @@ import org.springframework.stereotype.Repository
 import java.util.Optional
 
 @Repository
-interface ProductRepository : JpaRepository<ProductEntity, String> {
+interface ProductRepository : JpaRepository<ProductEntity, HouseholdEntityId> {
 
-    fun findByIdAndIsDeletedFalse(id: String): Optional<ProductEntity>
+    fun findByHouseholdIdAndId(householdId: String, id: String): Optional<ProductEntity>
 
-    fun findByEanAndIsDeletedFalse(ean: String): Optional<ProductEntity>
+    fun findByHouseholdIdAndIdAndIsDeletedFalse(householdId: String, id: String): Optional<ProductEntity>
 
-    fun findAllByIsDeletedFalse(): List<ProductEntity>
+    fun findByHouseholdIdAndEan(householdId: String, ean: String): Optional<ProductEntity>
 
-    fun findByUpdatedAtGreaterThan(updatedAt: Long): List<ProductEntity>
+    fun findByHouseholdIdAndEanAndIsDeletedFalse(householdId: String, ean: String): Optional<ProductEntity>
+
+    fun findByHouseholdIdAndNormalizedNameAndMeasureUnitAndEanIsNull(
+        householdId: String,
+        normalizedName: String,
+        measureUnit: MeasureUnit
+    ): Optional<ProductEntity>
+
+    fun findByHouseholdIdAndNormalizedNameAndMeasureUnitAndEanIsNullAndIsDeletedFalse(
+        householdId: String,
+        normalizedName: String,
+        measureUnit: MeasureUnit
+    ): Optional<ProductEntity>
+
+    fun findByHouseholdIdAndIsDeletedFalse(householdId: String): List<ProductEntity>
+
+    fun findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(
+        householdId: String,
+        serverVersion: Long
+    ): List<ProductEntity>
+
+    fun existsByHouseholdIdAndEanAndIdNotAndIsDeletedFalse(
+        householdId: String,
+        ean: String,
+        id: String
+    ): Boolean
 
     @Query(
         """
         SELECT p FROM ProductEntity p 
-        WHERE p.isDeleted = false 
+        WHERE p.householdId = :householdId
+          AND p.isDeleted = false 
           AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :query, '%')) 
                OR LOWER(p.brand) LIKE LOWER(CONCAT('%', :query, '%'))
                OR p.ean = :query)
         ORDER BY p.name ASC
         """
     )
-    fun searchProducts(@Param("query") query: String): List<ProductEntity>
-
-    fun existsByEanAndIdNotAndIsDeletedFalse(ean: String, id: String): Boolean
+    fun searchProducts(
+        @Param("householdId") householdId: String,
+        @Param("query") query: String
+    ): List<ProductEntity>
 }
 
 typealias ProdutoRepository = ProductRepository

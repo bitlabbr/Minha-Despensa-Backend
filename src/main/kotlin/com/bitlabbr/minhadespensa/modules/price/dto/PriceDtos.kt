@@ -31,23 +31,26 @@ import jakarta.validation.constraints.Size
 
 @Schema(description = "Dados para cadastro de registro de preço")
 data class PriceEntryRequestDto(
-    @field:Schema(description = "ID do registro (UUID)", example = "6fa85f64-5717-4562-b3fc-2c963f66afa9")
+    @Schema(description = "ID do registro (UUID)", example = "6fa85f64-5717-4562-b3fc-2c963f66afa9")
     val id: String? = null,
 
-    @field:Schema(description = "ID do produto associado", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
-    @field:NotBlank(message = "O ID do produto é obrigatório")
+    @Schema(description = "ID do produto associado", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
+    @NotBlank(message = "O ID do produto é obrigatório")
     val productId: String,
 
-    @field:Schema(description = "Preço unitário em centavos", example = "1290")
-    @field:PositiveOrZero(message = "O preço deve ser zero ou positivo")
+    @Schema(description = "Preço unitário em centavos", example = "1290")
+    @PositiveOrZero(message = "O preço deve ser zero ou positivo")
     val priceInCents: Long,
 
-    @field:Schema(description = "Nome do estabelecimento / supermercado", example = "Supermercado Pão de Açúcar")
-    @field:Size(max = 150, message = "O nome do estabelecimento não pode exceder 150 caracteres")
+    @Schema(description = "Nome do estabelecimento / supermercado", example = "Supermercado Pão de Açúcar")
+    @Size(max = 255, message = "O nome do estabelecimento não pode exceder 255 caracteres")
     val storeName: String? = null,
 
-    @field:Schema(description = "Timestamp da última modificação")
-    val updatedAt: Long? = null
+    @Schema(description = "Timestamp da última modificação")
+    val updatedAt: Long? = null,
+
+    @Schema(description = "Indica se o registro foi marcado como excluído", example = "false")
+    val isDeleted: Boolean = false
 )
 
 @Schema(description = "Dados do registro de preço retornado pela API")
@@ -67,6 +70,9 @@ data class PriceEntryResponseDto(
     @Schema(description = "Timestamp da última modificação", example = "1727280000000")
     val updatedAt: Long,
 
+    @Schema(description = "Versão monotônica de sincronização da casa", example = "42")
+    val serverVersion: Long = 0L,
+
     @Schema(description = "Indica se foi excluído", example = "false")
     val isDeleted: Boolean
 ) {
@@ -78,6 +84,7 @@ data class PriceEntryResponseDto(
                 priceInCents = entity.priceInCents,
                 storeName = entity.storeName,
                 updatedAt = entity.updatedAt,
+                serverVersion = entity.serverVersion,
                 isDeleted = entity.isDeleted
             )
     }

@@ -23,14 +23,27 @@
 
 package com.bitlabbr.minhadespensa.modules.sync.service
 
-import com.bitlabbr.minhadespensa.modules.catalog.domain.MeasureUnit
+import com.bitlabbr.minhadespensa.modules.budget.dto.MonthlyBudgetSyncDto
+import com.bitlabbr.minhadespensa.modules.budget.entity.MonthlyBudgetEntity
+import com.bitlabbr.minhadespensa.modules.budget.service.MonthlyBudgetService
+import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductCategorySyncDto
+import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductCategoryUpsertResult
 import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductRequestDto
-import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductResponseDto
+import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductUpsertResult
+import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductCategoryEntity
 import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductEntity
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductRepository
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
 import com.bitlabbr.minhadespensa.modules.catalog.service.ProductService
+import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdEntity
+import com.bitlabbr.minhadespensa.modules.household.repository.HouseholdRepository
+import com.bitlabbr.minhadespensa.modules.household.service.HouseholdService
+import com.bitlabbr.minhadespensa.modules.pantry.domain.MovementType
 import com.bitlabbr.minhadespensa.modules.pantry.dto.PantryItemRequestDto
+import com.bitlabbr.minhadespensa.modules.pantry.dto.PantryMovementSyncDto
 import com.bitlabbr.minhadespensa.modules.pantry.entity.PantryItemEntity
+import com.bitlabbr.minhadespensa.modules.pantry.entity.PantryMovementEntity
+import com.bitlabbr.minhadespensa.modules.pantry.service.PantryMovementService
 import com.bitlabbr.minhadespensa.modules.pantry.service.PantryService
 import com.bitlabbr.minhadespensa.modules.price.dto.PriceEntryRequestDto
 import com.bitlabbr.minhadespensa.modules.price.entity.PriceEntryEntity
@@ -41,126 +54,161 @@ import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingItemEntity
 import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingListEntity
 import com.bitlabbr.minhadespensa.modules.shoppinglist.service.ShoppingListService
 import com.bitlabbr.minhadespensa.modules.sync.dto.SyncPushRequestDto
+import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.util.Optional
 
 class SyncServiceTest {
 
+    private lateinit var householdService: HouseholdService
+    private lateinit var householdRepository: HouseholdRepository
+    private lateinit var productCategoryService: ProductCategoryService
     private lateinit var productService: ProductService
     private lateinit var productRepository: ProductRepository
-    private lateinit var pantryService: PantryService
     private lateinit var shoppingListService: ShoppingListService
+    private lateinit var pantryService: PantryService
     private lateinit var priceEntryService: PriceEntryService
+    private lateinit var pantryMovementService: PantryMovementService
+    private lateinit var monthlyBudgetService: MonthlyBudgetService
+    private lateinit var aliasRepository: EntityIdAliasRepository
+
     private lateinit var syncService: SyncService
+
+    private val householdId = "house-test-123"
 
     @BeforeEach
     fun setUp() {
+        householdService = mock()
+        householdRepository = mock()
+        productCategoryService = mock()
         productService = mock()
         productRepository = mock()
-        pantryService = mock()
         shoppingListService = mock()
+        pantryService = mock()
         priceEntryService = mock()
+        pantryMovementService = mock()
+        monthlyBudgetService = mock()
+        aliasRepository = mock()
+
         syncService = SyncService(
-            productService,
-            productRepository,
-            pantryService,
-            shoppingListService,
-            priceEntryService
+            householdService = householdService,
+            householdRepository = householdRepository,
+            productCategoryService = productCategoryService,
+            productService = productService,
+            productRepository = productRepository,
+            shoppingListService = shoppingListService,
+            pantryService = pantryService,
+            priceEntryService = priceEntryService,
+            pantryMovementService = pantryMovementService,
+            monthlyBudgetService = monthlyBudgetService,
+            aliasRepository = aliasRepository
         )
     }
 
     @Test
-    fun `push should process all entities and return total count`() {
+    fun `push should acquire household syncVersion and process all 8 collections with FK rewriting`() {
+        whenever(householdService.nextSyncVersion(householdId)).thenReturn(42L)
+
+        // Mock categoria
+        val catEntity = ProductCategoryEntity(householdId = householdId, id = "cat-canonical", name = "Mercearia")
+        whenever(productCategoryService.upsertForSync(eq(householdId), any(), eq(42L)))
+            .thenReturn(ProductCategoryUpsertResult(entity = catEntity, aliasId = "cat-alias", canonicalId = "cat-canonical"))
+
+        // Mock produto com remapeamento
+        val prodEntity = ProductEntity(householdId = householdId, id = "prod-canonical", name = "Arroz")
+        whenever(productService.upsertForSync(eq(householdId), any(), eq(42L), any()))
+            .thenReturn(ProductUpsertResult(entity = prodEntity, canonicalId = "prod-canonical", remappedFromId = "prod-old"))
+
+        // Mock verificação de existência do produto para filhos
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-canonical"))
+            .thenReturn(Optional.of(prodEntity))
+
         val request = SyncPushRequestDto(
-            products = listOf(
-                ProductRequestDto(name = "Feijão Preto 1kg", category = "Alimentos")
+            categories = listOf(ProductCategorySyncDto(id = "cat-alias", name = "Mercearia")),
+            products = listOf(ProductRequestDto(id = "prod-old", name = "Arroz")),
+            shoppingLists = listOf(ShoppingListRequestDto(id = "list-1", name = "Feira")),
+            shoppingItems = listOf(ShoppingItemRequestDto(id = "item-1", listId = "list-1", productId = "prod-old")),
+            pantryItems = listOf(PantryItemRequestDto(id = "pantry-1", productId = "prod-old", quantity = 2.0)),
+            priceEntries = listOf(PriceEntryRequestDto(id = "price-1", productId = "prod-old", priceInCents = 1500L)),
+            pantryMovements = listOf(
+                PantryMovementSyncDto(
+                    id = "mov-1",
+                    productId = "prod-old",
+                    type = MovementType.ENTRY_PURCHASE,
+                    quantity = 2.0,
+                    unitPriceInCents = 1500L,
+                    totalPriceInCents = 3000L
+                )
             ),
+            monthlyBudgets = listOf(MonthlyBudgetSyncDto(id = "2026-10", year = 2026, month = 10, budgetInCents = 50000L))
+        )
+
+        val response = syncService.push(householdId, request)
+
+        assertEquals(42L, response.serverVersion)
+        assertEquals(8, response.totalProcessed)
+        assertEquals("cat-canonical", response.categoryIdMappings["cat-alias"])
+        assertEquals("prod-canonical", response.productIdMappings["prod-old"])
+        assertTrue(response.rejected.isEmpty())
+
+        verify(productCategoryService).upsertForSync(eq(householdId), any(), eq(42L))
+        verify(productService).upsertForSync(eq(householdId), any(), eq(42L), any())
+        verify(shoppingListService).saveList(eq(householdId), any(), eq(42L))
+        verify(shoppingListService).saveItem(eq(householdId), any(), eq(42L))
+        verify(pantryService).saveItem(eq(householdId), any(), eq(42L))
+        verify(priceEntryService).savePrice(eq(householdId), any(), eq(42L))
+        verify(pantryMovementService).upsertForSync(eq(householdId), any(), eq(42L))
+        verify(monthlyBudgetService).upsertForSync(eq(householdId), any(), eq(42L))
+    }
+
+    @Test
+    fun `push should record rejected items if referenced product does not exist without failing batch`() {
+        whenever(householdService.nextSyncVersion(householdId)).thenReturn(10L)
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "missing-prod")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "missing-prod")).thenReturn(Optional.empty())
+
+        val request = SyncPushRequestDto(
             pantryItems = listOf(
-                PantryItemRequestDto(productId = "p-1", quantity = 3.0)
-            ),
-            shoppingLists = listOf(
-                ShoppingListRequestDto(name = "Feira Semanal")
-            ),
-            shoppingItems = listOf(
-                ShoppingItemRequestDto(listId = "l-1", rawText = "Tomate 1kg")
-            ),
-            priceEntries = listOf(
-                PriceEntryRequestDto(productId = "p-1", priceInCents = 899)
+                PantryItemRequestDto(id = "pantry-ghost", productId = "missing-prod", quantity = 1.0)
             )
         )
 
-        val response = syncService.push(request)
+        val response = syncService.push(householdId, request)
 
-        assertEquals(5, response.totalProcessed)
-        assertTrue(response.serverTimestamp > 0)
-        verify(productService).saveProduct(any())
-        verify(pantryService).saveItem(any())
-        verify(shoppingListService).saveList(any())
-        verify(shoppingListService).saveItem(any())
-        verify(priceEntryService).savePrice(any())
+        assertEquals(0, response.totalProcessed)
+        assertEquals(1, response.rejected.size)
+        assertEquals("PANTRY_ITEM", response.rejected[0].entityType)
+        assertEquals("pantry-ghost", response.rejected[0].id)
     }
 
     @Test
-    fun `pull should return modified entities since timestamp`() {
-        val since = 1000L
+    fun `pull should return modified entities across all 8 tables ordered by serverVersion`() {
+        val household = HouseholdEntity(id = householdId, name = "Casa Principal", syncVersion = 100L)
+        whenever(householdRepository.findById(householdId)).thenReturn(Optional.of(household))
 
-        val productEntity = ProductEntity(
-            id = "prod-1",
-            name = "Leite",
-            category = "Laticínios",
-            updatedAt = 1500L
-        )
+        val product = ProductEntity(householdId = householdId, id = "prod-1", name = "Leite", serverVersion = 15L)
+        whenever(productCategoryService.getModifiedSince(householdId, 10L)).thenReturn(emptyList())
+        whenever(productService.getModifiedSince(householdId, 10L)).thenReturn(listOf(product))
+        whenever(shoppingListService.getListsModifiedSince(householdId, 10L)).thenReturn(emptyList())
+        whenever(shoppingListService.getItemsModifiedSince(householdId, 10L)).thenReturn(emptyList())
+        whenever(pantryService.getModifiedSince(householdId, 10L)).thenReturn(emptyList())
+        whenever(priceEntryService.getPricesModifiedSince(householdId, 10L)).thenReturn(emptyList())
+        whenever(pantryMovementService.getModifiedSince(householdId, 10L)).thenReturn(emptyList())
+        whenever(monthlyBudgetService.getModifiedSince(householdId, 10L)).thenReturn(emptyList())
 
-        val pantryEntity = PantryItemEntity(
-            id = "pantry-1",
-            productId = "prod-1",
-            quantity = 2.0,
-            updatedAt = 1600L
-        )
+        val result = syncService.pull(householdId, sinceVersion = 10L)
 
-        val listEntity = ShoppingListEntity(
-            id = "list-1",
-            name = "Lista 1",
-            updatedAt = 1700L
-        )
-
-        val itemEntity = ShoppingItemEntity(
-            id = "item-1",
-            listId = "list-1",
-            rawText = "Queijo",
-            updatedAt = 1800L
-        )
-
-        val priceEntity = PriceEntryEntity(
-            id = "price-1",
-            productId = "prod-1",
-            priceInCents = 450,
-            updatedAt = 1900L
-        )
-
-        whenever(productRepository.findByUpdatedAtGreaterThan(since)).thenReturn(listOf(productEntity))
-        whenever(pantryService.getModifiedSince(since)).thenReturn(listOf(pantryEntity))
-        whenever(shoppingListService.getListsModifiedSince(since)).thenReturn(listOf(listEntity))
-        whenever(shoppingListService.getItemsModifiedSince(since)).thenReturn(listOf(itemEntity))
-        whenever(priceEntryService.getPricesModifiedSince(since)).thenReturn(listOf(priceEntity))
-
-        val result = syncService.pull(since)
-
+        assertEquals(100L, result.serverVersion)
         assertEquals(1, result.products.size)
         assertEquals("prod-1", result.products[0].id)
-        assertEquals(1, result.pantryItems.size)
-        assertEquals("pantry-1", result.pantryItems[0].id)
-        assertEquals(1, result.shoppingLists.size)
-        assertEquals("list-1", result.shoppingLists[0].id)
-        assertEquals(1, result.shoppingItems.size)
-        assertEquals("item-1", result.shoppingItems[0].id)
-        assertEquals(1, result.priceEntries.size)
-        assertEquals("price-1", result.priceEntries[0].id)
+        assertEquals(15L, result.products[0].serverVersion)
     }
 }

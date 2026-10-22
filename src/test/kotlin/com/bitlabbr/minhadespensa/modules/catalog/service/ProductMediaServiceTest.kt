@@ -56,7 +56,7 @@ class ProductMediaServiceTest {
         whenever(productMediaRepository.findByHouseholdIdAndProductId("house-1", "prod-1"))
             .thenReturn(Optional.empty())
         whenever(productMediaRepository.save(any<ProductMediaEntity>())).thenAnswer { it.arguments[0] }
-        whenever(productRepository.findById("prod-1")).thenReturn(Optional.empty())
+        whenever(productRepository.findByHouseholdIdAndId("house-1", "prod-1")).thenReturn(Optional.empty())
 
         val result = mediaService.saveMedia("house-1", "prod-1", bytes, "image/webp", 1L)
 

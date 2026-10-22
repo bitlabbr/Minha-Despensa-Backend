@@ -33,4 +33,10 @@ import java.util.Optional
 interface EntityIdAliasRepository : JpaRepository<EntityIdAliasEntity, EntityIdAliasId> {
     fun findByHouseholdIdAndEntityTypeAndAliasId(householdId: String, entityType: String, aliasId: String): Optional<EntityIdAliasEntity>
     fun findByHouseholdIdAndEntityType(householdId: String, entityType: String): List<EntityIdAliasEntity>
+
+    fun findCanonicalId(householdId: String, entityType: String, aliasId: String): String? {
+        return findByHouseholdIdAndEntityTypeAndAliasId(householdId, entityType, aliasId)
+            .map { it.canonicalId }
+            .orElse(null)
+    }
 }

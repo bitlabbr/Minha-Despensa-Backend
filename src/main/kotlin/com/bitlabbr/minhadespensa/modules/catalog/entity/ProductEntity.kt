@@ -23,12 +23,14 @@
 
 package com.bitlabbr.minhadespensa.modules.catalog.entity
 
-import com.bitlabbr.minhadespensa.common.entity.BaseSyncEntity
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
+import com.bitlabbr.minhadespensa.common.entity.HouseholdScopedSyncEntity
 import com.bitlabbr.minhadespensa.modules.catalog.domain.MeasureUnit
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.IdClass
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import java.util.UUID
@@ -39,10 +41,13 @@ import java.util.UUID
     indexes = [
         Index(name = "idx_product_ean", columnList = "ean"),
         Index(name = "idx_product_updated_at", columnList = "updated_at"),
+        Index(name = "idx_products_server_version", columnList = "household_id, server_version"),
         Index(name = "idx_product_is_deleted", columnList = "is_deleted")
     ]
 )
+@IdClass(HouseholdEntityId::class)
 class ProductEntity(
+    householdId: String = "",
     id: String = UUID.randomUUID().toString(),
 
     @Column(name = "ean", length = 32, nullable = true)
@@ -50,6 +55,9 @@ class ProductEntity(
 
     @Column(name = "name", nullable = false, length = 255)
     var name: String = "",
+
+    @Column(name = "normalized_name", nullable = false, length = 255)
+    var normalizedName: String = "",
 
     @Column(name = "category", nullable = false, length = 100)
     var category: String = "Geral",
@@ -67,6 +75,9 @@ class ProductEntity(
     @Column(name = "thumbnail_url", length = 1024, nullable = true)
     var thumbnailUrl: String? = null,
 
+    @Column(name = "image_hash", length = 64, nullable = true)
+    var imageHash: String? = null,
+
     @Column(name = "manually_added", nullable = false)
     var manuallyAdded: Boolean = true,
 
@@ -74,7 +85,14 @@ class ProductEntity(
     var notes: String? = null,
 
     updatedAt: Long = System.currentTimeMillis(),
+    serverVersion: Long = 0L,
     isDeleted: Boolean = false
-) : BaseSyncEntity(id = id, updatedAt = updatedAt, isDeleted = isDeleted)
+) : HouseholdScopedSyncEntity(
+    householdId = householdId,
+    id = id,
+    updatedAt = updatedAt,
+    serverVersion = serverVersion,
+    isDeleted = isDeleted
+)
 
 typealias Produto = ProductEntity

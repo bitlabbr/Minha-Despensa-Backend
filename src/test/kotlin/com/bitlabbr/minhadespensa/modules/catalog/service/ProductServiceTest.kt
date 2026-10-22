@@ -23,14 +23,18 @@
 
 package com.bitlabbr.minhadespensa.modules.catalog.service
 
-import com.bitlabbr.minhadespensa.common.exception.ConflictException
 import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
+import com.bitlabbr.minhadespensa.common.util.DeterministicIdUtils
 import com.bitlabbr.minhadespensa.modules.catalog.domain.MeasureUnit
 import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductRequestDto
 import com.bitlabbr.minhadespensa.modules.catalog.entity.ProductEntity
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductRepository
+import com.bitlabbr.minhadespensa.modules.sync.entity.EntityIdAliasEntity
+import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -44,12 +48,16 @@ import java.util.Optional
 class ProductServiceTest {
 
     private lateinit var productRepository: ProductRepository
+    private lateinit var aliasRepository: EntityIdAliasRepository
     private lateinit var productService: ProductService
+
+    private val householdId = "house-123"
 
     @BeforeEach
     fun setUp() {
         productRepository = mock()
-        productService = ProductService(productRepository)
+        aliasRepository = mock()
+        productService = ProductService(productRepository, aliasRepository)
     }
 
     @Test
@@ -65,16 +73,17 @@ class ProductServiceTest {
             updatedAt = 1000L
         )
 
-        whenever(productRepository.existsByEanAndIdNotAndIsDeletedFalse("7891000100103", "prod-1"))
-            .thenReturn(false)
-        whenever(productRepository.findById("prod-1")).thenReturn(Optional.empty())
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "prod-1")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-1")).thenReturn(Optional.empty())
+        whenever(productRepository.findByHouseholdIdAndEan(householdId, "7891000100103")).thenReturn(Optional.empty())
         whenever(productRepository.save(any<ProductEntity>())).thenAnswer { it.arguments[0] }
 
-        val result = productService.saveProduct(dto)
+        val result = productService.saveProduct(householdId, dto, syncVersion = 10L)
 
         assertEquals("prod-1", result.id)
         assertEquals("Café Tradicional 500g", result.name)
         assertEquals("Pilão", result.brand)
+        assertEquals(10L, result.serverVersion)
         assertFalse(result.isDeleted)
         verify(productRepository).save(any<ProductEntity>())
     }
@@ -82,9 +91,11 @@ class ProductServiceTest {
     @Test
     fun `saveProduct should update product when incoming updatedAt is newer`() {
         val existing = ProductEntity(
+            householdId = householdId,
             id = "prod-1",
             name = "Café Antigo",
-            updatedAt = 1000L
+            updatedAt = 1000L,
+            serverVersion = 5L
         )
 
         val updateDto = ProductRequestDto(
@@ -93,21 +104,25 @@ class ProductServiceTest {
             updatedAt = 2000L
         )
 
-        whenever(productRepository.findById("prod-1")).thenReturn(Optional.of(existing))
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "prod-1")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-1")).thenReturn(Optional.of(existing))
         whenever(productRepository.save(existing)).thenReturn(existing)
 
-        val result = productService.saveProduct(updateDto)
+        val result = productService.saveProduct(householdId, updateDto, syncVersion = 15L)
 
         assertEquals("Café Atualizado", result.name)
         assertEquals(2000L, result.updatedAt)
+        assertEquals(15L, result.serverVersion)
     }
 
     @Test
     fun `saveProduct should ignore older updates according to CRDT LWW`() {
         val existing = ProductEntity(
+            householdId = householdId,
             id = "prod-1",
             name = "Versão Mais Nova",
-            updatedAt = 5000L
+            updatedAt = 5000L,
+            serverVersion = 8L
         )
 
         val olderDto = ProductRequestDto(
@@ -116,10 +131,10 @@ class ProductServiceTest {
             updatedAt = 3000L
         )
 
-        whenever(productRepository.findById("prod-1")).thenReturn(Optional.of(existing))
-        whenever(productRepository.save(existing)).thenReturn(existing)
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "prod-1")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-1")).thenReturn(Optional.of(existing))
 
-        val result = productService.saveProduct(olderDto)
+        val result = productService.saveProduct(householdId, olderDto, syncVersion = 9L)
 
         // Deve manter o nome original e o timestamp mais recente
         assertEquals("Versão Mais Nova", result.name)
@@ -127,45 +142,103 @@ class ProductServiceTest {
     }
 
     @Test
-    fun `saveProduct should throw ConflictException if duplicate EAN exists`() {
-        val dto = ProductRequestDto(
-            id = "prod-2",
+    fun `upsertForSync should deduplicate product by EAN and record alias`() {
+        val canonical = ProductEntity(
+            householdId = householdId,
+            id = "canonical-prod-id",
             ean = "7891000100103",
-            name = "Outro Café"
+            name = "Arroz Tipo 1 Camil 5kg",
+            updatedAt = 2000L,
+            serverVersion = 4L
         )
 
-        whenever(productRepository.existsByEanAndIdNotAndIsDeletedFalse("7891000100103", "prod-2"))
-            .thenReturn(true)
+        val duplicateDto = ProductRequestDto(
+            id = "device-prod-id",
+            ean = "7891000100103",
+            name = "Arroz Camil 5kg",
+            updatedAt = 3000L
+        )
 
-        assertThrows<ConflictException> {
-            productService.saveProduct(dto)
-        }
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "device-prod-id")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "device-prod-id")).thenReturn(Optional.empty())
+        whenever(productRepository.findByHouseholdIdAndEan(householdId, "7891000100103")).thenReturn(Optional.of(canonical))
+        whenever(productRepository.save(canonical)).thenReturn(canonical)
+
+        val result = productService.upsertForSync(householdId, duplicateDto, syncVersion = 10L)
+
+        assertEquals("canonical-prod-id", result.canonicalId)
+        assertEquals("device-prod-id", result.remappedFromId)
+        assertEquals("Arroz Camil 5kg", result.entity.name)
+        assertEquals(10L, result.entity.serverVersion)
+
+        verify(aliasRepository).save(any<EntityIdAliasEntity>())
+    }
+
+    @Test
+    fun `upsertForSync should deduplicate product without EAN by normalizedName and measureUnit`() {
+        val normalizedName = DeterministicIdUtils.normalizeText("Banana Prata")
+        val canonical = ProductEntity(
+            householdId = householdId,
+            id = "canonical-banana",
+            ean = null,
+            name = "Banana Prata",
+            normalizedName = normalizedName,
+            measureUnit = MeasureUnit.KILOGRAM,
+            updatedAt = 1000L
+        )
+
+        val duplicateDto = ProductRequestDto(
+            id = "device-banana-id",
+            ean = null,
+            name = "banana  prata ",
+            measureUnit = MeasureUnit.KILOGRAM,
+            updatedAt = 1500L
+        )
+
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "device-banana-id")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "device-banana-id")).thenReturn(Optional.empty())
+        whenever(
+            productRepository.findByHouseholdIdAndNormalizedNameAndMeasureUnitAndEanIsNull(
+                householdId,
+                normalizedName,
+                MeasureUnit.KILOGRAM
+            )
+        ).thenReturn(Optional.of(canonical))
+        whenever(productRepository.save(canonical)).thenReturn(canonical)
+
+        val result = productService.upsertForSync(householdId, duplicateDto, syncVersion = 20L)
+
+        assertEquals("canonical-banana", result.canonicalId)
+        assertEquals("device-banana-id", result.remappedFromId)
+        verify(aliasRepository).save(any<EntityIdAliasEntity>())
     }
 
     @Test
     fun `getProductById should throw ResourceNotFoundException when product does not exist`() {
-        whenever(productRepository.findByIdAndIsDeletedFalse("non-existent"))
+        whenever(productRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, "non-existent"))
             .thenReturn(Optional.empty())
 
         assertThrows<ResourceNotFoundException> {
-            productService.getProductById("non-existent")
+            productService.getProductById(householdId, "non-existent")
         }
     }
 
     @Test
-    fun `deleteProduct should mark product as deleted`() {
+    fun `deleteProduct should mark product as deleted and set serverVersion`() {
         val existing = ProductEntity(
+            householdId = householdId,
             id = "prod-1",
             name = "Arroz",
             isDeleted = false
         )
 
-        whenever(productRepository.findByIdAndIsDeletedFalse("prod-1"))
+        whenever(productRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, "prod-1"))
             .thenReturn(Optional.of(existing))
 
-        productService.deleteProduct("prod-1")
+        productService.deleteProduct(householdId, "prod-1", syncVersion = 30L)
 
         assertTrue(existing.isDeleted)
+        assertEquals(30L, existing.serverVersion)
         verify(productRepository).save(existing)
     }
 }

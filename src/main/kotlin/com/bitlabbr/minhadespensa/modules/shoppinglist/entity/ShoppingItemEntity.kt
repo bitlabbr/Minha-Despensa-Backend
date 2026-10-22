@@ -23,9 +23,11 @@
 
 package com.bitlabbr.minhadespensa.modules.shoppinglist.entity
 
-import com.bitlabbr.minhadespensa.common.entity.BaseSyncEntity
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
+import com.bitlabbr.minhadespensa.common.entity.HouseholdScopedSyncEntity
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.IdClass
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import java.util.UUID
@@ -34,13 +36,13 @@ import java.util.UUID
 @Table(
     name = "shopping_items",
     indexes = [
-        Index(name = "idx_shopping_item_list_id", columnList = "list_id"),
-        Index(name = "idx_shopping_item_product_id", columnList = "product_id"),
-        Index(name = "idx_shopping_item_updated_at", columnList = "updated_at"),
-        Index(name = "idx_shopping_item_is_deleted", columnList = "is_deleted")
+        Index(name = "idx_shopping_items_list", columnList = "household_id, list_id"),
+        Index(name = "idx_shopping_items_server_version", columnList = "household_id, server_version")
     ]
 )
+@IdClass(HouseholdEntityId::class)
 class ShoppingItemEntity(
+    householdId: String = "",
     id: String = UUID.randomUUID().toString(),
 
     @Column(name = "list_id", nullable = false, length = 36)
@@ -49,7 +51,7 @@ class ShoppingItemEntity(
     @Column(name = "product_id", length = 36, nullable = true)
     var productId: String? = null,
 
-    @Column(name = "raw_text", length = 500, nullable = true)
+    @Column(name = "raw_text", length = 255, nullable = true)
     var rawText: String? = null,
 
     @Column(name = "quantity", nullable = false)
@@ -62,5 +64,12 @@ class ShoppingItemEntity(
     var isChecked: Boolean = false,
 
     updatedAt: Long = System.currentTimeMillis(),
+    serverVersion: Long = 0L,
     isDeleted: Boolean = false
-) : BaseSyncEntity(id = id, updatedAt = updatedAt, isDeleted = isDeleted)
+) : HouseholdScopedSyncEntity(
+    householdId = householdId,
+    id = id,
+    updatedAt = updatedAt,
+    serverVersion = serverVersion,
+    isDeleted = isDeleted
+)

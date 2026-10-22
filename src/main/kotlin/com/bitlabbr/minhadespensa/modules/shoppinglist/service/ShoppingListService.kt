@@ -45,29 +45,29 @@ class ShoppingListService(
     private val logger = LoggerFactory.getLogger(ShoppingListService::class.java)
 
     @Transactional(readOnly = true)
-    fun getAllLists(): List<ShoppingListResponseDto> {
-        val lists = shoppingListRepository.findAllByIsDeletedFalse()
+    fun getAllLists(householdId: String): List<ShoppingListResponseDto> {
+        val lists = shoppingListRepository.findByHouseholdIdAndIsDeletedFalse(householdId)
         return lists.map { list ->
-            val items = shoppingItemRepository.findAllByListIdAndIsDeletedFalse(list.id)
+            val items = shoppingItemRepository.findByHouseholdIdAndListIdAndIsDeletedFalse(householdId, list.id)
             ShoppingListResponseDto.fromEntity(list, items)
         }
     }
 
     @Transactional(readOnly = true)
-    fun getListById(id: String): ShoppingListResponseDto {
-        val list = shoppingListRepository.findByIdAndIsDeletedFalse(id)
+    fun getListById(householdId: String, id: String): ShoppingListResponseDto {
+        val list = shoppingListRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, id)
             .orElseThrow { ResourceNotFoundException("Lista de compras com ID '$id' não encontrada.", "ShoppingList", id) }
-        val items = shoppingItemRepository.findAllByListIdAndIsDeletedFalse(list.id)
+        val items = shoppingItemRepository.findByHouseholdIdAndListIdAndIsDeletedFalse(householdId, list.id)
         return ShoppingListResponseDto.fromEntity(list, items)
     }
 
     @Transactional
-    fun saveList(dto: ShoppingListRequestDto): ShoppingListResponseDto {
+    fun saveList(householdId: String, dto: ShoppingListRequestDto, syncVersion: Long = 0L): ShoppingListResponseDto {
         val targetId = dto.id ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val incomingUpdatedAt = dto.updatedAt ?: now
 
-        val existingOpt = shoppingListRepository.findById(targetId)
+        val existingOpt = shoppingListRepository.findByHouseholdIdAndId(householdId, targetId)
 
         val entityToSave = if (existingOpt.isPresent) {
             val existing = existingOpt.get()
@@ -77,56 +77,82 @@ class ShoppingListService(
                 existing.status = dto.status
                 existing.budgetInCents = dto.budgetInCents
                 existing.updatedAt = incomingUpdatedAt
-                existing.isDeleted = false
+                existing.serverVersion = syncVersion
+                existing.isDeleted = dto.isDeleted
                 existing
             } else {
-                logger.info("Ignorando atualização da lista $targetId devido à regra LWW")
+                logger.debug("LWW ignorou atualização de lista $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
                 existing
             }
         } else {
             ShoppingListEntity(
+                householdId = householdId,
                 id = targetId,
                 name = dto.name,
                 type = dto.type,
                 status = dto.status,
                 budgetInCents = dto.budgetInCents,
                 updatedAt = incomingUpdatedAt,
-                isDeleted = false
+                serverVersion = syncVersion,
+                isDeleted = dto.isDeleted
             )
         }
 
         val saved = shoppingListRepository.save(entityToSave)
-        val items = shoppingItemRepository.findAllByListIdAndIsDeletedFalse(saved.id)
-        return ShoppingListResponseDto.fromEntity(saved, items)
+
+        // Cascade Tombstone: se a lista foi excluída, todos os seus itens tornam-se excluídos
+        if (saved.isDeleted) {
+            val items = shoppingItemRepository.findByHouseholdIdAndListId(householdId, saved.id)
+            val modifiedItems = items.filter { !it.isDeleted }
+            if (modifiedItems.isNotEmpty()) {
+                modifiedItems.forEach { item ->
+                    item.isDeleted = true
+                    item.updatedAt = maxOf(item.updatedAt + 1, incomingUpdatedAt)
+                    item.serverVersion = syncVersion
+                }
+                shoppingItemRepository.saveAll(modifiedItems)
+                logger.info("Cascade tombstone propagado para ${modifiedItems.size} itens da lista ${saved.id} na casa $householdId")
+            }
+        }
+
+        val activeItems = shoppingItemRepository.findByHouseholdIdAndListIdAndIsDeletedFalse(householdId, saved.id)
+        return ShoppingListResponseDto.fromEntity(saved, activeItems)
     }
 
     @Transactional
-    fun deleteList(id: String) {
-        val list = shoppingListRepository.findByIdAndIsDeletedFalse(id)
+    fun deleteList(householdId: String, id: String, syncVersion: Long = 0L) {
+        val list = shoppingListRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, id)
             .orElseThrow { ResourceNotFoundException("Lista de compras com ID '$id' não encontrada para exclusão.", "ShoppingList", id) }
 
         val now = System.currentTimeMillis()
         list.isDeleted = true
         list.updatedAt = now
+        list.serverVersion = syncVersion
         shoppingListRepository.save(list)
 
         // Soft delete em cascata nos itens da lista
-        val items = shoppingItemRepository.findAllByListIdAndIsDeletedFalse(id)
+        val items = shoppingItemRepository.findByHouseholdIdAndListIdAndIsDeletedFalse(householdId, id)
         items.forEach {
             it.isDeleted = true
-            it.updatedAt = now
+            it.updatedAt = maxOf(it.updatedAt + 1, now)
+            it.serverVersion = syncVersion
         }
         shoppingItemRepository.saveAll(items)
-        logger.info("Lista de compras $id e seus ${items.size} itens foram marcados como excluídos (soft-delete).")
+        logger.info("Lista de compras $id e seus ${items.size} itens foram marcados como excluídos na casa $householdId.")
     }
 
     @Transactional
-    fun saveItem(dto: ShoppingItemRequestDto): ShoppingItemResponseDto {
+    fun saveItem(householdId: String, dto: ShoppingItemRequestDto, syncVersion: Long = 0L): ShoppingItemResponseDto {
         val targetId = dto.id ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val incomingUpdatedAt = dto.updatedAt ?: now
 
-        val existingOpt = shoppingItemRepository.findById(targetId)
+        // Regra "Tombstone do pai vence o filho": se a lista pai está excluída e é mais recente, o item deve ser excluído
+        val parentOpt = shoppingListRepository.findByHouseholdIdAndId(householdId, dto.listId)
+        val forcedDeletedByParent = parentOpt.isPresent && parentOpt.get().isDeleted && parentOpt.get().updatedAt >= incomingUpdatedAt
+        val effectiveIsDeleted = if (forcedDeletedByParent) true else dto.isDeleted
+
+        val existingOpt = shoppingItemRepository.findByHouseholdIdAndId(householdId, targetId)
 
         val entityToSave = if (existingOpt.isPresent) {
             val existing = existingOpt.get()
@@ -138,14 +164,16 @@ class ShoppingListService(
                 existing.priceAtTime = dto.priceAtTime
                 existing.isChecked = dto.isChecked
                 existing.updatedAt = incomingUpdatedAt
-                existing.isDeleted = false
+                existing.serverVersion = syncVersion
+                existing.isDeleted = effectiveIsDeleted
                 existing
             } else {
-                logger.info("Ignorando atualização do item de lista $targetId devido à regra LWW")
+                logger.debug("LWW ignorou atualização de item $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
                 existing
             }
         } else {
             ShoppingItemEntity(
+                householdId = householdId,
                 id = targetId,
                 listId = dto.listId,
                 productId = dto.productId,
@@ -154,7 +182,8 @@ class ShoppingListService(
                 priceAtTime = dto.priceAtTime,
                 isChecked = dto.isChecked,
                 updatedAt = incomingUpdatedAt,
-                isDeleted = false
+                serverVersion = syncVersion,
+                isDeleted = effectiveIsDeleted
             )
         }
 
@@ -163,28 +192,29 @@ class ShoppingListService(
     }
 
     @Transactional
-    fun deleteItem(id: String) {
-        val item = shoppingItemRepository.findByIdAndIsDeletedFalse(id)
+    fun deleteItem(householdId: String, id: String, syncVersion: Long = 0L) {
+        val item = shoppingItemRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, id)
             .orElseThrow { ResourceNotFoundException("Item de lista com ID '$id' não encontrado para exclusão.", "ShoppingItem", id) }
 
         item.isDeleted = true
         item.updatedAt = System.currentTimeMillis()
+        item.serverVersion = syncVersion
         shoppingItemRepository.save(item)
     }
 
     @Transactional(readOnly = true)
-    fun getItemsByListId(listId: String): List<ShoppingItemResponseDto> {
-        return shoppingItemRepository.findAllByListIdAndIsDeletedFalse(listId)
+    fun getItemsByListId(householdId: String, listId: String): List<ShoppingItemResponseDto> {
+        return shoppingItemRepository.findByHouseholdIdAndListIdAndIsDeletedFalse(householdId, listId)
             .map { ShoppingItemResponseDto.fromEntity(it) }
     }
 
     @Transactional(readOnly = true)
-    fun getListsModifiedSince(since: Long): List<ShoppingListEntity> {
-        return shoppingListRepository.findByUpdatedAtGreaterThan(since)
+    fun getListsModifiedSince(householdId: String, sinceVersion: Long): List<ShoppingListEntity> {
+        return shoppingListRepository.findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(householdId, sinceVersion)
     }
 
     @Transactional(readOnly = true)
-    fun getItemsModifiedSince(since: Long): List<ShoppingItemEntity> {
-        return shoppingItemRepository.findByUpdatedAtGreaterThan(since)
+    fun getItemsModifiedSince(householdId: String, sinceVersion: Long): List<ShoppingItemEntity> {
+        return shoppingItemRepository.findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(householdId, sinceVersion)
     }
 }

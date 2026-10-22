@@ -80,10 +80,12 @@ class ProductMediaService(
         val saved = productMediaRepository.save(entity)
 
         // Atualiza o imageHash no produto correspondente se ele existir
-        val productOpt = productRepository.findById(productId)
+        val productOpt = productRepository.findByHouseholdIdAndId(householdId, productId)
         if (productOpt.isPresent) {
             val product = productOpt.get()
-            product.thumbnailUrl = sha256Hash
+            product.imageHash = sha256Hash
+            product.serverVersion = syncVersion
+            product.updatedAt = now
             productRepository.save(product)
         }
 
@@ -99,10 +101,11 @@ class ProductMediaService(
     @Transactional
     fun deleteMedia(householdId: String, productId: String) {
         productMediaRepository.deleteByHouseholdIdAndProductId(householdId, productId)
-        val productOpt = productRepository.findById(productId)
+        val productOpt = productRepository.findByHouseholdIdAndId(householdId, productId)
         if (productOpt.isPresent) {
             val product = productOpt.get()
-            product.thumbnailUrl = null
+            product.imageHash = null
+            product.updatedAt = System.currentTimeMillis()
             productRepository.save(product)
         }
         logger.info("Mídia removida para produto $productId na casa $householdId")

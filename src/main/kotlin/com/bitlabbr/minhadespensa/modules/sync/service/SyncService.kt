@@ -23,10 +23,19 @@
 
 package com.bitlabbr.minhadespensa.modules.sync.service
 
+import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
+import com.bitlabbr.minhadespensa.modules.budget.dto.MonthlyBudgetSyncDto
+import com.bitlabbr.minhadespensa.modules.budget.service.MonthlyBudgetService
+import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductCategorySyncDto
 import com.bitlabbr.minhadespensa.modules.catalog.dto.ProductResponseDto
 import com.bitlabbr.minhadespensa.modules.catalog.repository.ProductRepository
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
 import com.bitlabbr.minhadespensa.modules.catalog.service.ProductService
+import com.bitlabbr.minhadespensa.modules.household.repository.HouseholdRepository
+import com.bitlabbr.minhadespensa.modules.household.service.HouseholdService
 import com.bitlabbr.minhadespensa.modules.pantry.dto.PantryItemResponseDto
+import com.bitlabbr.minhadespensa.modules.pantry.dto.PantryMovementSyncDto
+import com.bitlabbr.minhadespensa.modules.pantry.service.PantryMovementService
 import com.bitlabbr.minhadespensa.modules.pantry.service.PantryService
 import com.bitlabbr.minhadespensa.modules.price.dto.PriceEntryResponseDto
 import com.bitlabbr.minhadespensa.modules.price.service.PriceEntryService
@@ -36,92 +45,227 @@ import com.bitlabbr.minhadespensa.modules.shoppinglist.service.ShoppingListServi
 import com.bitlabbr.minhadespensa.modules.sync.dto.SyncPullResponseDto
 import com.bitlabbr.minhadespensa.modules.sync.dto.SyncPushRequestDto
 import com.bitlabbr.minhadespensa.modules.sync.dto.SyncPushResponseDto
+import com.bitlabbr.minhadespensa.modules.sync.dto.SyncRejectedItemDto
+import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
 class SyncService(
+    private val householdService: HouseholdService,
+    private val householdRepository: HouseholdRepository,
+    private val productCategoryService: ProductCategoryService,
     private val productService: ProductService,
     private val productRepository: ProductRepository,
-    private val pantryService: PantryService,
     private val shoppingListService: ShoppingListService,
-    private val priceEntryService: PriceEntryService
+    private val pantryService: PantryService,
+    private val priceEntryService: PriceEntryService,
+    private val pantryMovementService: PantryMovementService,
+    private val monthlyBudgetService: MonthlyBudgetService,
+    private val aliasRepository: EntityIdAliasRepository
 ) {
     private val logger = LoggerFactory.getLogger(SyncService::class.java)
 
     @Transactional
-    fun push(request: SyncPushRequestDto): SyncPushResponseDto {
+    fun push(householdId: String, request: SyncPushRequestDto): SyncPushResponseDto {
+        // 1. Lock pessimista da casa e geração atômica de nova versão
+        val syncVersion = householdService.nextSyncVersion(householdId)
+        val serverNow = System.currentTimeMillis()
+
+        // Clamp de segurança: no máximo 5 minutos no futuro contra relógios desajustados
+        fun clamp(ts: Long?): Long = minOf(ts ?: serverNow, serverNow + 300_000L)
+
+        val categoryIdMappings = mutableMapOf<String, String>()
+        val productIdMappings = mutableMapOf<String, String>()
+        val rejected = mutableListOf<SyncRejectedItemDto>()
         var count = 0
 
-        // 1. Processar produtos do catálogo
-        request.products.forEach {
-            productService.saveProduct(it)
+        // 2. Passo 1 - Categorias de Produtos
+        request.categories.forEach { catDto ->
+            val clamped = catDto.copy(updatedAt = clamp(catDto.updatedAt))
+            val result = productCategoryService.upsertForSync(householdId, clamped, syncVersion)
+            if (result.aliasId != null) {
+                categoryIdMappings[result.aliasId] = result.canonicalId
+            }
             count++
         }
 
-        // 2. Processar itens da despensa
-        request.pantryItems.forEach {
-            pantryService.saveItem(it)
+        // 3. Passo 2 - Produtos do Catálogo
+        request.products.forEach { prodDto ->
+            val clamped = prodDto.copy(updatedAt = clamp(prodDto.updatedAt))
+            val result = productService.upsertForSync(householdId, clamped, syncVersion, serverNow)
+            if (result.remappedFromId != null) {
+                productIdMappings[result.remappedFromId] = result.canonicalId
+            }
             count++
         }
 
-        // 3. Processar listas de compras
-        request.shoppingLists.forEach {
-            shoppingListService.saveList(it)
+        fun resolveEffectiveProductId(rawId: String?): String? {
+            if (rawId == null) return null
+            return productIdMappings[rawId]
+                ?: aliasRepository.findCanonicalId(householdId, "PRODUCT", rawId)
+                ?: rawId
+        }
+
+        fun productExists(pId: String): Boolean {
+            return productRepository.findByHouseholdIdAndId(householdId, pId).isPresent
+        }
+
+        // 4. Passo 3 - Listas de Compras
+        request.shoppingLists.forEach { listDto ->
+            val clamped = listDto.copy(updatedAt = clamp(listDto.updatedAt))
+            shoppingListService.saveList(householdId, clamped, syncVersion)
             count++
         }
 
-        // 4. Processar itens de compras
-        request.shoppingItems.forEach {
-            shoppingListService.saveItem(it)
+        // 5. Passo 4 - Itens das Listas de Compras
+        request.shoppingItems.forEach { itemDto ->
+            val clamped = itemDto.copy(updatedAt = clamp(itemDto.updatedAt))
+            val effectiveProductId = resolveEffectiveProductId(clamped.productId)
+            val itemToSave = if (effectiveProductId != clamped.productId) {
+                clamped.copy(productId = effectiveProductId)
+            } else {
+                clamped
+            }
+            shoppingListService.saveItem(householdId, itemToSave, syncVersion)
             count++
         }
 
-        // 5. Processar registros de preços
-        request.priceEntries.forEach {
-            priceEntryService.savePrice(it)
+        // 6. Passo 5 - Itens da Despensa (Estoque)
+        request.pantryItems.forEach { pantryDto ->
+            val clamped = pantryDto.copy(updatedAt = clamp(pantryDto.updatedAt))
+            val effectiveProductId = resolveEffectiveProductId(clamped.productId)
+            if (effectiveProductId == null || !productExists(effectiveProductId)) {
+                rejected.add(
+                    SyncRejectedItemDto(
+                        entityType = "PANTRY_ITEM",
+                        id = clamped.id ?: "unknown",
+                        reason = "Produto com ID '${clamped.productId}' não encontrado na casa $householdId"
+                    )
+                )
+            } else {
+                val pantryToSave = if (effectiveProductId != clamped.productId) {
+                    clamped.copy(productId = effectiveProductId)
+                } else {
+                    clamped
+                }
+                pantryService.saveItem(householdId, pantryToSave, syncVersion)
+                count++
+            }
+        }
+
+        // 7. Passo 6 - Histórico de Preços
+        request.priceEntries.forEach { priceDto ->
+            val clamped = priceDto.copy(updatedAt = clamp(priceDto.updatedAt))
+            val effectiveProductId = resolveEffectiveProductId(clamped.productId)
+            if (effectiveProductId == null || !productExists(effectiveProductId)) {
+                rejected.add(
+                    SyncRejectedItemDto(
+                        entityType = "PRICE_ENTRY",
+                        id = clamped.id ?: "unknown",
+                        reason = "Produto com ID '${clamped.productId}' não encontrado na casa $householdId"
+                    )
+                )
+            } else {
+                val priceToSave = if (effectiveProductId != clamped.productId) {
+                    clamped.copy(productId = effectiveProductId)
+                } else {
+                    clamped
+                }
+                priceEntryService.savePrice(householdId, priceToSave, syncVersion)
+                count++
+            }
+        }
+
+        // 8. Passo 7 - Movimentações de Estoque (Livro-Razão)
+        request.pantryMovements.forEach { movDto ->
+            val clamped = movDto.copy(updatedAt = clamp(movDto.updatedAt))
+            val effectiveProductId = resolveEffectiveProductId(clamped.productId)
+            if (effectiveProductId == null || !productExists(effectiveProductId)) {
+                rejected.add(
+                    SyncRejectedItemDto(
+                        entityType = "PANTRY_MOVEMENT",
+                        id = clamped.id,
+                        reason = "Produto com ID '${clamped.productId}' não encontrado na casa $householdId"
+                    )
+                )
+            } else {
+                val movToSave = if (effectiveProductId != clamped.productId) {
+                    clamped.copy(productId = effectiveProductId)
+                } else {
+                    clamped
+                }
+                pantryMovementService.upsertForSync(householdId, movToSave, syncVersion)
+                count++
+            }
+        }
+
+        // 9. Passo 8 - Orçamentos Mensais
+        request.monthlyBudgets.forEach { budgetDto ->
+            val clamped = budgetDto.copy(updatedAt = clamp(budgetDto.updatedAt))
+            monthlyBudgetService.upsertForSync(householdId, clamped, syncVersion)
             count++
         }
 
         val serverTimestamp = System.currentTimeMillis()
-        logger.info("Sync PUSH concluído com sucesso: $count registros processados no timestamp $serverTimestamp")
+        logger.info(
+            "Sync PUSH concluído com sucesso para casa $householdId: $count processados, " +
+                "${productIdMappings.size} produtos remapeados, ${rejected.size} rejeitados (versão=$syncVersion)"
+        )
 
         return SyncPushResponseDto(
             serverTimestamp = serverTimestamp,
-            totalProcessed = count
+            serverVersion = syncVersion,
+            totalProcessed = count,
+            productIdMappings = productIdMappings,
+            categoryIdMappings = categoryIdMappings,
+            rejected = rejected
         )
     }
 
     @Transactional(readOnly = true)
-    fun pull(since: Long): SyncPullResponseDto {
-        val serverTimestamp = System.currentTimeMillis()
+    fun pull(householdId: String, sinceVersion: Long): SyncPullResponseDto {
+        val currentHousehold = householdRepository.findById(householdId)
+            .orElseThrow { ResourceNotFoundException("Casa com ID '$householdId' não encontrada.", "Household", householdId) }
 
-        val products = productRepository.findByUpdatedAtGreaterThan(since)
+        val categories = productCategoryService.getModifiedSince(householdId, sinceVersion)
+            .map { ProductCategorySyncDto.fromEntity(it) }
+        val products = productService.getModifiedSince(householdId, sinceVersion)
             .map { ProductResponseDto.fromEntity(it) }
-
-        val pantryItems = pantryService.getModifiedSince(since)
-            .map { PantryItemResponseDto.fromEntity(it) }
-
-        val shoppingLists = shoppingListService.getListsModifiedSince(since)
+        val shoppingLists = shoppingListService.getListsModifiedSince(householdId, sinceVersion)
             .map { ShoppingListResponseDto.fromEntity(it) }
-
-        val shoppingItems = shoppingListService.getItemsModifiedSince(since)
+        val shoppingItems = shoppingListService.getItemsModifiedSince(householdId, sinceVersion)
             .map { ShoppingItemResponseDto.fromEntity(it) }
-
-        val priceEntries = priceEntryService.getPricesModifiedSince(since)
+        val pantryItems = pantryService.getModifiedSince(householdId, sinceVersion)
+            .map { PantryItemResponseDto.fromEntity(it) }
+        val priceEntries = priceEntryService.getPricesModifiedSince(householdId, sinceVersion)
             .map { PriceEntryResponseDto.fromEntity(it) }
+        val movements = pantryMovementService.getModifiedSince(householdId, sinceVersion)
+            .map { PantryMovementSyncDto.fromEntity(it) }
+        val budgets = monthlyBudgetService.getModifiedSince(householdId, sinceVersion)
+            .map { MonthlyBudgetSyncDto.fromEntity(it) }
 
-        val total = products.size + pantryItems.size + shoppingLists.size + shoppingItems.size + priceEntries.size
-        logger.info("Sync PULL concluído: $total registros alterados desde $since (servidor=$serverTimestamp)")
+        val total = categories.size + products.size + shoppingLists.size + shoppingItems.size +
+            pantryItems.size + priceEntries.size + movements.size + budgets.size
+
+        logger.info(
+            "Sync PULL concluído para casa $householdId: $total registros alterados desde versão $sinceVersion " +
+                "(versãoAtual=${currentHousehold.syncVersion})"
+        )
 
         return SyncPullResponseDto(
-            serverTimestamp = serverTimestamp,
+            serverTimestamp = System.currentTimeMillis(),
+            serverVersion = currentHousehold.syncVersion,
+            hasMore = false,
+            categories = categories,
             products = products,
-            pantryItems = pantryItems,
             shoppingLists = shoppingLists,
             shoppingItems = shoppingItems,
-            priceEntries = priceEntries
+            pantryItems = pantryItems,
+            priceEntries = priceEntries,
+            pantryMovements = movements,
+            monthlyBudgets = budgets
         )
     }
 }

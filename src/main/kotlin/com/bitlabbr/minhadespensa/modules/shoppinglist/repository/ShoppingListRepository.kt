@@ -23,17 +23,23 @@
 
 package com.bitlabbr.minhadespensa.modules.shoppinglist.repository
 
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
 import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingListEntity
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 import java.util.Optional
 
 @Repository
-interface ShoppingListRepository : JpaRepository<ShoppingListEntity, String> {
+interface ShoppingListRepository : JpaRepository<ShoppingListEntity, HouseholdEntityId> {
 
-    fun findByIdAndIsDeletedFalse(id: String): Optional<ShoppingListEntity>
+    fun findByHouseholdIdAndId(householdId: String, id: String): Optional<ShoppingListEntity>
 
-    fun findAllByIsDeletedFalse(): List<ShoppingListEntity>
+    fun findByHouseholdIdAndIdAndIsDeletedFalse(householdId: String, id: String): Optional<ShoppingListEntity>
 
-    fun findByUpdatedAtGreaterThan(updatedAt: Long): List<ShoppingListEntity>
+    fun findByHouseholdIdAndIsDeletedFalse(householdId: String): List<ShoppingListEntity>
+
+    fun findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(
+        householdId: String,
+        serverVersion: Long
+    ): List<ShoppingListEntity>
 }
