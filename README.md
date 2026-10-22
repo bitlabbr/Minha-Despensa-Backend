@@ -1,6 +1,6 @@
 # Minha Despensa - Backend API 🛒🚀
 
-Backend RESTful e motor de sincronização offline-first para o ecossistema **Minha Despensa** (Kotlin Multiplatform / Compose Multiplatform).
+Backend RESTful e motor de sincronização multi-tenant offline-first (v2.1) para o ecossistema **Minha Despensa** (Kotlin Multiplatform / Compose Multiplatform).
 
 ---
 
@@ -8,11 +8,13 @@ Backend RESTful e motor de sincronização offline-first para o ecossistema **Mi
 
 - **Linguagem:** Kotlin 2.3.x (JVM 17)
 - **Framework:** Spring Boot 4.1.x
+- **Segurança:** Spring Security + OAuth2 Resource Server (JWT HMAC-SHA256)
 - **Persistência:** Spring Data JPA + Hibernate (com suporte a Kotlin `allOpen`)
-- **Banco de Dados:** PostgreSQL (Domus / Local)
-- **Documentação de API:** Springdoc OpenAPI 3 / Swagger UI (v2.8.x)
+- **Migrações de Banco:** Flyway (Schema multi-tenant versionado)
+- **Banco de Dados:** PostgreSQL 15 (Domus / Local)
+- **Documentação de API:** Springdoc OpenAPI 3 / Swagger UI com Bearer Auth (v2.8.x)
 - **Validação:** Jakarta Bean Validation (Hibernate Validator)
-- **Testes:** JUnit 5, Spring Boot Test, Mockito Kotlin
+- **Testes:** JUnit 5, Spring Boot Test, Mockito Kotlin (92 testes, 100% verde)
 
 ---
 
@@ -23,28 +25,34 @@ A aplicação adota Clean Architecture modularizada por contexto de domínio, co
 ```text
 com.bitlabbr.minhadespensa
 ├── common/                  # Componentes compartilhados e infraestrutura transversal
-│   ├── config/              # Configurações de OpenAPI/Swagger e CORS (WebConfig)
+│   ├── config/              # Configurações de OpenAPI/Swagger (BearerAuth) e CORS (WebConfig)
 │   ├── dto/                 # Envelopes ApiResponse<T> e ErrorResponse padronizado
-│   ├── entity/              # HouseholdScopedSyncEntity (multi-tenant, updatedAt, serverVersion, isDeleted)
-│   └── exception/           # Hierarquia de exceções de domínio e GlobalExceptionHandler
+│   ├── entity/              # HouseholdEntityId e HouseholdScopedSyncEntity
+│   ├── exception/           # Hierarquia de exceções de domínio e GlobalExceptionHandler
+│   └── util/                # DeterministicIdUtils (Normalizador e RFC 4122 UUIDv5)
 ├── controller/              # Endpoints utilitários e diagnósticos (TestController)
 └── modules/                 # Módulos funcionais de negócio
-    ├── catalog/             # Catálogo de produtos (Entity, DTOs, Repository, Service, Controller)
-    ├── pantry/              # Itens da despensa doméstica e datas de validade
-    ├── shoppinglist/        # Listas de compras (PLANNED, SCRATCHPAD) e itens
-    ├── price/               # Histórico de preços e estabelecimentos
-    └── sync/                # Contratos e DTOs de sincronização offline-first (Push / Pull)
+    ├── auth/                # Autenticação JWT, Registro, Rotação e Revogação
+    ├── household/           # Gestão de Casas, Convites Crockford e Controle de Membros
+    ├── catalog/             # Catálogo de Produtos, Categorias e Mídia (Fotos WebP)
+    ├── pantry/              # Itens da despensa doméstica e movimentações (Livro-Razão)
+    ├── shoppinglist/        # Listas e itens de compras com Cascade Tombstone
+    ├── price/               # Histórico de preços por estabelecimento
+    ├── budget/              # Orçamentos mensais da casa
+    ├── sync/                # Motor de Sincronização Bidirecional v2.1 e Aliases
+    └── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
 ```
 
 ---
 
-## 🔄 Princípios de Sincronização Offline-First (CRDT / LWW)
+## 🔄 Princípios de Sincronização Offline-First Multi-Tenant (CRDT / LWW)
 
 Para garantir integridade com o aplicativo cliente móvel (Android / iOS):
-1. **Identificadores Imutáveis:** Chaves primárias UUID geradas no cliente ou no backend.
-2. **Soft Deletes:** Exclusões não removem fisicamente o registro; o campo `isDeleted` é atualizado como `true`.
-3. **Last-Write-Wins (LWW):** Cada registro possui `updatedAt` (epoch millis). No conflito de sincronização, o registro com timestamp mais recente prevalece.
-4. **Ponteiro Incremental (`since`):** Requisições de Pull enviam `since` para recuperar somente registros alterados ou deletados após o último checkpoint.
+1. **Multi-Tenancy por Household:** Isolamento absoluto entre casas via chave primária composta `(household_id, id)` e header obrigatório `X-Household-Id`.
+2. **Serialização Monotônica (`syncVersion`):** Cada operação de push adquire lock pessimista na linha da casa, incrementa monotonicamente o `syncVersion` e carimba todos os registros do lote.
+3. **Soft Deletes ("Cascade Tombstones"):** Exclusões não removem fisicamente o registro; o campo `isDeleted` é atualizado como `true`. Tombstone do pai (ex: lista) força a exclusão dos filhos (itens).
+4. **Last-Write-Wins (LWW):** Cada registro possui `updatedAt` (epoch millis). No conflito de sincronização, o registro com timestamp mais recente prevalece.
+5. **Deduplicação Híbrida & Aliases Duráveis:** Produtos e categorias duplicados convergem para o registro canônico mais antigo. O servidor registra na tabela `entity_id_aliases` e retorna o mapeamento para ajuste automático das FKs no SQLite do dispositivo móvel.
 
 ---
 
@@ -65,7 +73,8 @@ spring.datasource.username=<USER>
 spring.datasource.password=<PASSWORD>
 spring.datasource.driver-class-name=org.postgresql.Driver
 
-spring.jpa.hibernate.ddl-auto=update
+spring.flyway.enabled=true
+spring.jpa.hibernate.ddl-auto=validate
 spring.jpa.show-sql=true
 ```
 
@@ -83,29 +92,29 @@ Após iniciar, acesse a documentação interativa e execute chamadas diretamente
 
 ## 📡 Endpoints Principais da API
 
-| Módulo | Método | Endpoint | Descrição |
-| :--- | :--- | :--- | :--- |
-| **Sync** | `POST` | `/api/v1/sync/push` | Envio em lote de alterações locais (LWW) |
-| **Sync** | `GET` | `/api/v1/sync/pull?since={ts}` | Download de alterações ocorridas desde `since` |
-| **Catálogo** | `GET` | `/api/v1/products?q={query}` | Listar/buscar produtos ativos |
-| **Catálogo** | `GET` | `/api/v1/products/{id}` | Buscar produto por ID |
-| **Catálogo** | `GET` | `/api/v1/products/ean/{ean}` | Buscar produto por código de barras |
-| **Catálogo** | `POST` | `/api/v1/products` | Cadastrar novo produto |
-| **Catálogo** | `PUT` | `/api/v1/products/{id}` | Atualizar produto existente |
-| **Catálogo** | `DELETE` | `/api/v1/products/{id}` | Soft delete de produto |
-| **Despensa** | `GET` | `/api/v1/pantry?productId={id}` | Listar itens da despensa |
-| **Despensa** | `POST` | `/api/v1/pantry` | Adicionar produto ao estoque da despensa |
-| **Despensa** | `DELETE` | `/api/v1/pantry/{id}` | Soft delete de item da despensa |
-| **Listas** | `GET` | `/api/v1/shopping-lists` | Listar todas as listas com seus itens |
-| **Listas** | `POST` | `/api/v1/shopping-lists` | Criar nova lista de compras |
-| **Listas** | `POST` | `/api/v1/shopping-lists/{id}/items` | Adicionar/atualizar item na lista |
-| **Diagnóstico** | `GET` | `/api/v1/test/hello` | Health check da aplicação |
+| Módulo | Método | Endpoint | Autenticação | Descrição |
+| :--- | :--- | :--- | :--- | :--- |
+| **Auth** | `POST` | `/api/v1/auth/register` | Aberto | Cria usuário, senha BCrypt e casa inicial |
+| **Auth** | `POST` | `/api/v1/auth/login` | Aberto | Autentica e emite tokens (Access JWT + Refresh) |
+| **Auth** | `POST` | `/api/v1/auth/refresh` | Aberto | Rotação de refresh token com detecção de reuso |
+| **Auth** | `POST` | `/api/v1/auth/logout` | Bearer Auth | Revoga refresh token do dispositivo |
+| **Auth** | `GET` | `/api/v1/auth/me` | Bearer Auth | Perfil do usuário autenticado |
+| **Household** | `GET` | `/api/v1/households` | Bearer Auth | Listar casas do usuário |
+| **Household** | `POST` | `/api/v1/households` | Bearer Auth | Criar nova casa |
+| **Household** | `POST` | `/api/v1/households/join` | Bearer Auth | Ingressar via código de convite `CASA-XXXXXXXX` |
+| **Sync** | `POST` | `/api/v1/sync/push` | Bearer + `X-Household-Id` | Envio em lote das 8 coleções (LWW + Aliases) |
+| **Sync** | `GET` | `/api/v1/sync/pull?since={v}` | Bearer + `X-Household-Id` | Download de deltas com `serverVersion > since` |
+| **Mídia** | `PUT` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Upload de foto (WebP/JPEG até 200KB) |
+| **Mídia** | `GET` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Download de foto com suporte a ETag |
+| **Mídia** | `DELETE` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Remove foto e avança `syncVersion` |
+| **Invoice** | `POST` | `/api/v1/invoice/parse` | Aberto | Scraping de nota fiscal via QR Code SEFAZ-PE |
+| **Diagnóstico** | `GET` | `/api/v1/test/hello` | Aberto | Health check da aplicação |
 
 ---
 
 ## 🧪 Execução de Testes Automatizados
 
-Para rodar toda a suíte de testes unitários e de integração (WebMvc / DataJpa):
+Para rodar toda a suíte de testes unitários e de integração:
 ```bash
 ./gradlew test
 ```

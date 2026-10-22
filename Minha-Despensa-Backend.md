@@ -83,14 +83,14 @@ com.bitlabbr.minhadespensa
 
 ## 3. 📋 Matriz de Endpoints da API REST (v1)
 
-### 3.1. Autenticação (`/api/v1/auth`) — Aberto
-| Método | Endpoint | Descrição |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/register` | Cria usuário, senha com hash BCrypt e casa pessoal inicial |
-| `POST` | `/api/v1/auth/login` | Autentica e emite par de tokens (Access JWT + Refresh Token) |
-| `POST` | `/api/v1/auth/refresh` | Rotação de refresh token com detecção de reuso |
-| `POST` | `/api/v1/auth/logout` | Revoga o refresh token ativo do dispositivo |
-| `GET` | `/api/v1/auth/me` | Retorna o perfil do usuário autenticado |
+### 3.1. Autenticação (`/api/v1/auth`)
+| Método | Endpoint | Autenticação | Descrição |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Aberto | Cria usuário, senha com hash BCrypt e casa pessoal inicial |
+| `POST` | `/api/v1/auth/login` | Aberto | Autentica e emite par de tokens (Access JWT + Refresh Token) |
+| `POST` | `/api/v1/auth/refresh` | Aberto | Rotação de refresh token com detecção de reuso |
+| `POST` | `/api/v1/auth/logout` | Requer Bearer Auth | Revoga o refresh token ativo do dispositivo |
+| `GET` | `/api/v1/auth/me` | Requer Bearer Auth | Retorna o perfil do usuário autenticado |
 
 ### 3.2. Casas Compartilhadas (`/api/v1/households`) — Requer Bearer Auth
 | Método | Endpoint | Descrição |
@@ -114,7 +114,7 @@ com.bitlabbr.minhadespensa
 | :--- | :--- | :--- |
 | `PUT` | `/api/v1/media/products/{productId}` | Upload de foto (WebP/JPEG até 200KB) com hash SHA-256 |
 | `GET` | `/api/v1/media/products/{productId}` | Download de foto com suporte a ETag / 304 Not Modified |
-| `DELETE` | `/api/v1/media/products/{productId}` | Exclui foto do produto na casa |
+| `DELETE` | `/api/v1/media/products/{productId}` | Exclui foto do produto na casa e incrementa syncVersion |
 
 ### 3.5. Nota Fiscal SEFAZ (`/api/v1/invoice`) & Testes
 | Método | Endpoint | Descrição |
@@ -142,17 +142,21 @@ flowchart TD
     end
 ```
 
-### 4.1. Algoritmo de Deduplicação Híbrida de Produtos
+### 4.1. Algoritmo de Deduplicação Híbrida de Produtos & Categorias
 Quando um dispositivo envia um produto no Push:
 1. O backend busca por chave primária `(household_id, targetId)`.
 2. Se `ean != null`: busca por chave natural `findByHouseholdIdAndEan(householdId, cleanEan)`.
 3. Se `ean == null`: busca por chave natural `findByHouseholdIdAndNormalizedNameAndMeasureUnitAndEanIsNull(householdId, normalizedName, measureUnit)`.
 4. Se encontrar um produto canônico existente com outro ID:
    - Salva o vínculo durável na tabela `entity_id_aliases (household_id, entity_type='PRODUCT', alias_id, canonical_id)`.
-   - Se existia uma linha temporária sob `targetId`, marca como excluída (`isDeleted = true, ean = null`).
+   - Se existia uma linha sob `targetId`, marca como excluída (`isDeleted = true, ean = null`), e desambigua o nome normalizado (`normalizedName = "${normalizedName}#deleted#${id}"`) para que nunca colida em `ux_products_household_name_unit`.
+   - Caso o produto obsoleto possua foto e o canônico ainda não, migra a mídia para o canônico.
    - Aplica a regra LWW no produto canônico.
-   - Retorna `productIdMappings[targetId] = canonical.id`.
+   - Retorna `productIdMappings[targetId] = canonical.id` (preservando o ID original enviado mesmo em retentativas).
 5. Durante o processamento subsequente de `shopping_items`, `pantry_items`, `price_entries` e `pantry_movements`, as chaves estrangeiras `productId` são reescritas em memória utilizando o mapa de remapeamento e a tabela `entity_id_aliases`.
+6. **Categorias (`product_categories`):** Processadas analogamente em `ProductCategoryService.upsertForSync`. A busca por `normalizedName` precede o ID; caso colida, registra o alias, desambigua o nome da obsoleta (`#deleted#id`) e retorna `categoryIdMappings`.
+7. **Integridade de Listas de Compras:** Itens de lista (`shopping_items`) sem a respectiva lista pai ou com `productId` inexistente na casa são rejeitados de forma graciosa em `SyncRejectedItemDto`, sem interromper o lote e evitando falhas de chave estrangeira no SQLite móvel.
+8. **Migration Flyway:** Os índices parciais únicos em `V1__init_multi_tenant_schema.sql` contêm `WHERE is_deleted = FALSE`, garantindo que produtos e categorias soft-deleted nunca bloqueiem novos cadastros com o mesmo EAN ou nome.
 
 ---
 
@@ -199,7 +203,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **80 testes automatizados** cobrindo todos os módulos.
+- Suíte completa com **92 testes automatizados** cobrindo todos os módulos.
 - Testes unitários de serviços com simulação de regras LWW e controle de transações.
 - Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`) e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.
