@@ -36,6 +36,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -53,6 +54,8 @@ class AuthController(
     private val authService: AuthService
 ) {
 
+    private val logger = LoggerFactory.getLogger(AuthController::class.java)
+
     @Operation(summary = "Criar nova conta de usuário", description = "Registra um usuário individual, gera automaticamente sua casa pessoal inicial e devolve o par de tokens JWT.")
     @ApiResponses(
         value = [
@@ -63,6 +66,7 @@ class AuthController(
     )
     @PostMapping("/register")
     fun register(@Valid @RequestBody dto: RegisterRequestDto): ResponseEntity<ApiResponse<AuthResponseDto>> {
+        logger.info("[Auth] Register requested for email='{}', name='{}'", dto.email, dto.name)
         val result = authService.register(dto)
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.created(result, "User registered successfully."))
@@ -77,6 +81,7 @@ class AuthController(
     )
     @PostMapping("/login")
     fun login(@Valid @RequestBody dto: LoginRequestDto): ApiResponse<AuthResponseDto> {
+        logger.info("[Auth] Login requested for email='{}'", dto.email)
         val result = authService.login(dto)
         return ApiResponse.ok(result, "Login successful.")
     }

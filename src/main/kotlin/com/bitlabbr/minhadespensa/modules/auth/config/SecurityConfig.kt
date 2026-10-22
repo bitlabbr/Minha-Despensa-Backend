@@ -27,6 +27,7 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.OctetSequenceKey
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet
 import com.nimbusds.jose.proc.SecurityContext
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -39,6 +40,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
+import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint
 import org.springframework.security.web.SecurityFilterChain
 import java.nio.charset.StandardCharsets
 import javax.crypto.SecretKey
@@ -50,6 +52,8 @@ class SecurityConfig(
     @Value("\${app.jwt.secret:minha-despensa-super-secret-jwt-key-minimum-256-bits-length-for-hmac-sha256}")
     private val jwtSecret: String
 ) {
+
+    private val logger = LoggerFactory.getLogger(SecurityConfig::class.java)
 
     @Bean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
@@ -94,6 +98,21 @@ class SecurityConfig(
             }
             .oauth2ResourceServer { oauth2 ->
                 oauth2.jwt { }
+                val defaultEntryPoint = BearerTokenAuthenticationEntryPoint()
+                oauth2.authenticationEntryPoint { request, response, authException ->
+                    val authHeader = request.getHeader("Authorization")
+                    val authSummary = when {
+                        authHeader == null -> "MISSING (no Authorization header sent)"
+                        authHeader.startsWith("Bearer ") -> "Bearer (token length: ${authHeader.length - 7})"
+                        else -> "INVALID_PREFIX (value='${authHeader.take(20)}...')"
+                    }
+                    val householdId = request.getHeader("X-Household-Id") ?: "MISSING"
+                    logger.warn(
+                        "[Security 401 Unauthorized] URI: {} {} | Client: {} | Authorization: {} | X-Household-Id: {} | Reason: {}",
+                        request.method, request.requestURI, request.remoteAddr, authSummary, householdId, authException.message
+                    )
+                    defaultEntryPoint.commence(request, response, authException)
+                }
             }
 
         return http.build()

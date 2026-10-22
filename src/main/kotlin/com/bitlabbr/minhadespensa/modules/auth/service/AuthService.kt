@@ -131,10 +131,15 @@ class AuthService(
     @Transactional
     fun login(dto: LoginRequestDto): AuthResponseDto {
         val normalizedEmail = dto.email.trim().lowercase()
-        val user = userRepository.findByEmail(normalizedEmail)
-            .orElseThrow { UnauthorizedException("Invalid email or password") }
+        val userOpt = userRepository.findByEmail(normalizedEmail)
+        if (userOpt.isEmpty) {
+            logger.warn("[Auth Login Failed] No user found with email='{}'", normalizedEmail)
+            throw UnauthorizedException("Invalid email or password")
+        }
+        val user = userOpt.get()
 
         if (!passwordEncoder.matches(dto.password, user.passwordHash)) {
+            logger.warn("[Auth Login Failed] Password mismatch for email='{}' (userId={})", normalizedEmail, user.id)
             throw UnauthorizedException("Invalid email or password")
         }
 

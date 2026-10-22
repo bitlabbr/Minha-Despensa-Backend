@@ -37,6 +37,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -58,11 +59,15 @@ class HouseholdController(
     private val householdService: HouseholdService
 ) {
 
+    private val logger = LoggerFactory.getLogger(HouseholdController::class.java)
+
     @Operation(summary = "Listar casas do usuário", description = "Retorna todas as casas das quais o usuário autenticado é membro, acompanhadas dos integrantes e código de convite.")
     @GetMapping
     fun getUserHouseholds(@AuthenticationPrincipal jwt: Jwt): ApiResponse<List<HouseholdDetailResponseDto>> {
         val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
+        logger.info("[Households] User {} requested their households list", userId)
         val result = householdService.getUserHouseholds(userId)
+        logger.info("[Households] User {} retrieved {} household(s)", userId, result.size)
         return ApiResponse.ok(result)
     }
 

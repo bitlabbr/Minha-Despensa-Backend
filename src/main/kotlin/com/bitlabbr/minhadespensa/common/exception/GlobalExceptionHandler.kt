@@ -156,12 +156,13 @@ class GlobalExceptionHandler {
                 message = it.defaultMessage ?: "Invalid value"
             )
         }
-        logger.warn("[400 Validation Error] at {}: {} field(s) with errors", request.requestURI, fieldErrors.size)
+        val errorSummary = fieldErrors.joinToString("; ") { "${it.field}: ${it.message}" }
+        logger.warn("[400 Validation Error] at {}: {}", request.requestURI, errorSummary)
 
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
-            message = "Validation error in submitted fields",
+            message = "Validation error: $errorSummary",
             path = request.requestURI,
             fieldErrors = fieldErrors
         )
@@ -173,11 +174,12 @@ class GlobalExceptionHandler {
         ex: HttpMessageNotReadableException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[400 Not Readable] at {}: {}", request.requestURI, ex.message)
+        val rootCause = ex.mostSpecificCause.message ?: ex.message ?: "Invalid request body"
+        logger.warn("[400 Not Readable] at {}: {}", request.requestURI, rootCause)
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
-            message = "Request body is missing or unreadable",
+            message = "Request body is invalid or missing required fields: $rootCause",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
