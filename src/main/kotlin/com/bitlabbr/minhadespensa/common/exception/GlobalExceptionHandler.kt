@@ -69,6 +69,36 @@ class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse)
     }
 
+    @ExceptionHandler(UnauthorizedException::class)
+    fun handleUnauthorized(
+        ex: UnauthorizedException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        logger.warn("[401 Unauthorized] em {}: {}", request.requestURI, ex.message)
+        val errorResponse = ErrorResponse(
+            status = HttpStatus.UNAUTHORIZED.value(),
+            error = HttpStatus.UNAUTHORIZED.reasonPhrase,
+            message = ex.message ?: "Não autenticado",
+            path = request.requestURI
+        )
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse)
+    }
+
+    @ExceptionHandler(ForbiddenException::class)
+    fun handleForbidden(
+        ex: ForbiddenException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        logger.warn("[403 Forbidden] em {}: {}", request.requestURI, ex.message)
+        val errorResponse = ErrorResponse(
+            status = HttpStatus.FORBIDDEN.value(),
+            error = HttpStatus.FORBIDDEN.reasonPhrase,
+            message = ex.message ?: "Acesso negado",
+            path = request.requestURI
+        )
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse)
+    }
+
     @ExceptionHandler(InvalidRequestException::class, IllegalArgumentException::class)
     fun handleInvalidRequest(
         ex: Exception,

@@ -53,3 +53,17 @@ class ConflictException(
 class InvalidRequestException(
     message: String
 ) : BusinessException(message)
+
+/**
+ * Exceção lançada quando a requisição não possui credenciais válidas ou o token expirou (401).
+ */
+class UnauthorizedException(
+    message: String = "Não autenticado"
+) : BusinessException(message)
+
+/**
+ * Exceção lançada quando o usuário autenticado não tem permissão para acessar o recurso ou household solicitado (403).
+ */
+class ForbiddenException(
+    message: String = "Acesso negado"
+) : BusinessException(message)
