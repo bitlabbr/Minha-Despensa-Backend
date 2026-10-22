@@ -36,7 +36,7 @@ interface HouseholdRepository : JpaRepository<HouseholdEntity, String> {
     fun findByInviteCodeIgnoreCase(inviteCode: String): Optional<HouseholdEntity>
     fun existsByInviteCodeIgnoreCase(inviteCode: String): Boolean
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE HouseholdEntity h SET h.syncVersion = h.syncVersion + 1, h.updatedAt = :now WHERE h.id = :id")
     fun incrementSyncVersion(@Param("id") id: String, @Param("now") now: Long): Int
 }

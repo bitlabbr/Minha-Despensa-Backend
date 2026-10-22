@@ -37,10 +37,10 @@ class MonthlyBudgetEntity(
     householdId: String = "",
     id: String = "",
 
-    @Column(name = "year", nullable = false)
+    @Column(name = "\"year\"", nullable = false)
     var year: Int = 0,
 
-    @Column(name = "month", nullable = false)
+    @Column(name = "\"month\"", nullable = false)
     var month: Int = 0,
 
     @Column(name = "budget_in_cents", nullable = false)
