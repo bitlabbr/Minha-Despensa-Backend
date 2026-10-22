@@ -30,23 +30,23 @@ import jakarta.validation.constraints.Size
 @Schema(description = "Payload para criação de nova casa compartilhada")
 data class CreateHouseholdRequestDto(
     @Schema(description = "Nome de identificação da casa", example = "Casa de Praia")
-    @NotBlank(message = "O nome da casa é obrigatório")
-    @Size(max = 150, message = "O nome da casa não pode exceder 150 caracteres")
+    @NotBlank(message = "Household name is required")
+    @Size(min = 2, max = 80, message = "Household name must be between 2 and 80 characters")
     val name: String
 )
 
 @Schema(description = "Payload para atualização de nome da casa")
 data class UpdateHouseholdRequestDto(
     @Schema(description = "Novo nome da casa", example = "Nossa Casa")
-    @NotBlank(message = "O nome da casa é obrigatório")
-    @Size(max = 150, message = "O nome da casa não pode exceder 150 caracteres")
+    @NotBlank(message = "Household name is required")
+    @Size(min = 2, max = 80, message = "Household name must be between 2 and 80 characters")
     val name: String
 )
 
 @Schema(description = "Payload para ingressar em uma casa existente por código de convite")
 data class JoinHouseholdRequestDto(
     @Schema(description = "Código de convite da casa (ex: CASA-XXXXXXXX)", example = "CASA-7X9K2M3P")
-    @NotBlank(message = "O código de convite é obrigatório")
+    @NotBlank(message = "Invite code is required")
     val inviteCode: String
 )
 

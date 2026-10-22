@@ -50,7 +50,7 @@ class ProductMediaService(
         syncVersion: Long
     ): ProductMediaEntity {
         if (bytes.size > maxSizeBytes) {
-            throw InvalidRequestException("A imagem excede o tamanho máximo permitido de 200KB (recebido: ${bytes.size / 1024}KB)")
+            throw InvalidRequestException("Image exceeds maximum allowed size of 200KB (received: ${bytes.size / 1024}KB)")
         }
 
         val sha256Hash = computeSha256(bytes)
@@ -89,7 +89,7 @@ class ProductMediaService(
             productRepository.save(product)
         }
 
-        logger.info("Mídia salva para produto $productId na casa $householdId (hash=$sha256Hash, size=${bytes.size} bytes)")
+        logger.info("Media saved for product $productId in household $householdId (hash=$sha256Hash, size=${bytes.size} bytes)")
         return saved
     }
 
@@ -108,7 +108,7 @@ class ProductMediaService(
             product.updatedAt = System.currentTimeMillis()
             productRepository.save(product)
         }
-        logger.info("Mídia removida para produto $productId na casa $householdId")
+        logger.info("Media removed for product $productId in household $householdId")
     }
 
     private fun computeSha256(bytes: ByteArray): String {

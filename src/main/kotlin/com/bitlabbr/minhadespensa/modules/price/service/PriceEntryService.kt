@@ -64,7 +64,7 @@ class PriceEntryService(
                 existing.isDeleted = dto.isDeleted
                 priceEntryRepository.save(existing)
             } else {
-                logger.debug("LWW ignorou atualização de preço $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
+                logger.debug("LWW ignored update for price entry $targetId: current=${existing.updatedAt} > incoming=$incomingUpdatedAt")
                 existing
             }
         } else {
@@ -87,7 +87,7 @@ class PriceEntryService(
     @Transactional
     fun deletePrice(householdId: String, id: String, syncVersion: Long = 0L) {
         val existing = priceEntryRepository.findByHouseholdIdAndId(householdId, id)
-            .orElseThrow { ResourceNotFoundException("Registro de preço com ID '$id' não encontrado.", "PriceEntry", id) }
+            .orElseThrow { ResourceNotFoundException("Price entry with ID '$id' not found.", "PriceEntry", id) }
 
         existing.isDeleted = true
         existing.updatedAt = System.currentTimeMillis()

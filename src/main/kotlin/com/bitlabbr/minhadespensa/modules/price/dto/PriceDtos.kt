@@ -35,15 +35,15 @@ data class PriceEntryRequestDto(
     val id: String? = null,
 
     @Schema(description = "ID do produto associado", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
-    @NotBlank(message = "O ID do produto é obrigatório")
+    @NotBlank(message = "Product ID is required")
     val productId: String,
 
     @Schema(description = "Preço unitário em centavos", example = "1290")
-    @PositiveOrZero(message = "O preço deve ser zero ou positivo")
+    @PositiveOrZero(message = "Price must be zero or positive")
     val priceInCents: Long,
 
     @Schema(description = "Nome do estabelecimento / supermercado", example = "Supermercado Pão de Açúcar")
-    @Size(max = 255, message = "O nome do estabelecimento não pode exceder 255 caracteres")
+    @Size(max = 255, message = "Store name must not exceed 255 characters")
     val storeName: String? = null,
 
     @Schema(description = "Timestamp da última modificação")

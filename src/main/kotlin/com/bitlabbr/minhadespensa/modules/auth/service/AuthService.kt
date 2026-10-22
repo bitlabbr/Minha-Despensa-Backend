@@ -71,13 +71,13 @@ class AuthService(
         val normalizedEmail = dto.email.trim().lowercase()
 
         if (userRepository.existsByEmail(normalizedEmail)) {
-            throw ConflictException("E-mail '$normalizedEmail' já está cadastrado no sistema")
+            throw ConflictException("Email '$normalizedEmail' is already registered")
         }
 
         val user = UserEntity(
             name = dto.name.trim(),
             email = normalizedEmail,
-            passwordHash = requireNotNull(passwordEncoder.encode(dto.password)) { "Erro ao gerar hash da senha" }
+            passwordHash = requireNotNull(passwordEncoder.encode(dto.password)) { "Error generating password hash" }
         )
         val savedUser = userRepository.save(user)
 
@@ -107,7 +107,7 @@ class AuthService(
 
         saveRefreshToken(savedUser.id, rawRefreshToken, familyId)
 
-        logger.info("Usuário registrado com sucesso: id=${savedUser.id}, email=${savedUser.email}, householdId=${savedHousehold.id}")
+        logger.info("User registered successfully: id=${savedUser.id}, email=${savedUser.email}, householdId=${savedHousehold.id}")
 
         return AuthResponseDto(
             accessToken = accessToken,
@@ -132,10 +132,10 @@ class AuthService(
     fun login(dto: LoginRequestDto): AuthResponseDto {
         val normalizedEmail = dto.email.trim().lowercase()
         val user = userRepository.findByEmail(normalizedEmail)
-            .orElseThrow { UnauthorizedException("E-mail ou senha incorretos") }
+            .orElseThrow { UnauthorizedException("Invalid email or password") }
 
         if (!passwordEncoder.matches(dto.password, user.passwordHash)) {
-            throw UnauthorizedException("E-mail ou senha incorretos")
+            throw UnauthorizedException("Invalid email or password")
         }
 
         val activeHousehold = resolveActiveHouseholdSummary(user)
@@ -145,7 +145,7 @@ class AuthService(
 
         saveRefreshToken(user.id, rawRefreshToken, familyId)
 
-        logger.info("Login bem-sucedido: id=${user.id}, email=${user.email}")
+        logger.info("Login successful: id=${user.id}, email=${user.email}")
 
         return AuthResponseDto(
             accessToken = accessToken,
@@ -165,17 +165,17 @@ class AuthService(
     fun refreshToken(dto: RefreshTokenRequestDto): AuthResponseDto {
         val tokenHash = jwtTokenService.hashToken(dto.refreshToken)
         val tokenEntity = refreshTokenRepository.findByTokenHash(tokenHash)
-            .orElseThrow { UnauthorizedException("Refresh token inválido ou não encontrado") }
+            .orElseThrow { UnauthorizedException("Invalid or missing refresh token") }
 
         if (tokenEntity.expiresAt < System.currentTimeMillis()) {
-            throw UnauthorizedException("Refresh token expirado. Faça login novamente.")
+            throw UnauthorizedException("Refresh token expired. Please log in again.")
         }
 
         if (tokenEntity.revoked) {
             // Detecção de reutilização de token revogado (possível ataque de replay/roubo de token)
             refreshTokenRepository.revokeAllInFamily(tokenEntity.familyId)
-            logger.warn("Reutilização de refresh token revogado detectada! Família ${tokenEntity.familyId} revogada.")
-            throw UnauthorizedException("Tentativa de reutilização de refresh token detectada. Todas as sessões deste dispositivo foram encerradas.")
+            logger.warn("Revoked refresh token reuse detected! Revoked family ${tokenEntity.familyId}.")
+            throw UnauthorizedException("Refresh token reuse detected. All sessions for this device have been terminated.")
         }
 
         // Revoga o token atual
@@ -183,7 +183,7 @@ class AuthService(
         refreshTokenRepository.save(tokenEntity)
 
         val user = userRepository.findById(tokenEntity.userId)
-            .orElseThrow { UnauthorizedException("Usuário não encontrado") }
+            .orElseThrow { UnauthorizedException("User not found") }
 
         // Rotaciona para um novo refresh token dentro da mesma família
         val newRawRefreshToken = generateOpaqueToken()
@@ -209,13 +209,13 @@ class AuthService(
     @Transactional
     fun logout(userId: String) {
         refreshTokenRepository.deleteByUserId(userId)
-        logger.info("Logout realizado para o usuário $userId")
+        logger.info("Logout completed for user $userId")
     }
 
     @Transactional(readOnly = true)
     fun getCurrentUser(userId: String): UserSummaryDto {
         val user = userRepository.findById(userId)
-            .orElseThrow { ResourceNotFoundException("Usuário não encontrado", "User", userId) }
+            .orElseThrow { ResourceNotFoundException("User not found", "User", userId) }
 
         return UserSummaryDto(
             id = user.id,

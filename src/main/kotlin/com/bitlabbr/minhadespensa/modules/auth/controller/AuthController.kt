@@ -65,7 +65,7 @@ class AuthController(
     fun register(@Valid @RequestBody dto: RegisterRequestDto): ResponseEntity<ApiResponse<AuthResponseDto>> {
         val result = authService.register(dto)
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(ApiResponse.created(result, "Usuário registrado com sucesso."))
+            .body(ApiResponse.created(result, "User registered successfully."))
     }
 
     @Operation(summary = "Autenticação (Login)", description = "Valida e-mail e senha cadastrados e devolve o par de tokens JWT + refresh token.")
@@ -78,7 +78,7 @@ class AuthController(
     @PostMapping("/login")
     fun login(@Valid @RequestBody dto: LoginRequestDto): ApiResponse<AuthResponseDto> {
         val result = authService.login(dto)
-        return ApiResponse.ok(result, "Login realizado com sucesso.")
+        return ApiResponse.ok(result, "Login successful.")
     }
 
     @Operation(summary = "Renovar Token de Acesso", description = "Rotaciona o refresh token apresentado e emite um novo access token JWT.")
@@ -91,23 +91,23 @@ class AuthController(
     @PostMapping("/refresh")
     fun refresh(@Valid @RequestBody dto: RefreshTokenRequestDto): ApiResponse<AuthResponseDto> {
         val result = authService.refreshToken(dto)
-        return ApiResponse.ok(result, "Sessão renovada com sucesso.")
+        return ApiResponse.ok(result, "Session refreshed successfully.")
     }
 
     @Operation(summary = "Encerrar Sessão (Logout)", description = "Invalida todos os refresh tokens ativos do usuário.")
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/logout")
     fun logout(@AuthenticationPrincipal jwt: Jwt): ApiResponse<Unit> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         authService.logout(userId)
-        return ApiResponse.ok("Logout realizado com sucesso.")
+        return ApiResponse.ok("Logout successful.")
     }
 
     @Operation(summary = "Obter dados do usuário autenticado", description = "Retorna os detalhes cadastrais do usuário associado ao token JWT.")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me")
     fun getCurrentUser(@AuthenticationPrincipal jwt: Jwt): ApiResponse<UserSummaryDto> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         val result = authService.getCurrentUser(userId)
         return ApiResponse.ok(result)
     }

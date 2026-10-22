@@ -61,7 +61,7 @@ class HouseholdController(
     @Operation(summary = "Listar casas do usuário", description = "Retorna todas as casas das quais o usuário autenticado é membro, acompanhadas dos integrantes e código de convite.")
     @GetMapping
     fun getUserHouseholds(@AuthenticationPrincipal jwt: Jwt): ApiResponse<List<HouseholdDetailResponseDto>> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         val result = householdService.getUserHouseholds(userId)
         return ApiResponse.ok(result)
     }
@@ -78,10 +78,10 @@ class HouseholdController(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody dto: CreateHouseholdRequestDto
     ): ResponseEntity<ApiResponse<HouseholdDetailResponseDto>> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         val result = householdService.createHousehold(userId, dto)
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(ApiResponse.created(result, "Casa criada com sucesso."))
+            .body(ApiResponse.created(result, "Household created successfully."))
     }
 
     @Operation(summary = "Atualizar dados da casa", description = "Permite alterar o nome de identificação da casa.")
@@ -91,9 +91,9 @@ class HouseholdController(
         @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String,
         @Valid @RequestBody dto: UpdateHouseholdRequestDto
     ): ApiResponse<HouseholdDetailResponseDto> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         val result = householdService.updateHousehold(id, userId, dto)
-        return ApiResponse.ok(result, "Casa atualizada com sucesso.")
+        return ApiResponse.ok(result, "Household updated successfully.")
     }
 
     @Operation(summary = "Ingressar em uma casa existente", description = "Associa o usuário autenticado a uma casa existente a partir de seu código de convite (CASA-XXXXXXXX).")
@@ -108,9 +108,9 @@ class HouseholdController(
         @AuthenticationPrincipal jwt: Jwt,
         @Valid @RequestBody dto: JoinHouseholdRequestDto
     ): ApiResponse<HouseholdDetailResponseDto> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         val result = householdService.joinHousehold(userId, dto)
-        return ApiResponse.ok(result, "Você ingressou na casa com sucesso.")
+        return ApiResponse.ok(result, "Joined household successfully.")
     }
 
     @Operation(summary = "Sair de uma casa compartilhada", description = "Remove o vínculo do usuário com a casa indicada.")
@@ -119,9 +119,9 @@ class HouseholdController(
         @AuthenticationPrincipal jwt: Jwt,
         @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String
     ): ApiResponse<Unit> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.leaveHousehold(id, userId)
-        return ApiResponse.ok("Você saiu da casa com sucesso.")
+        return ApiResponse.ok("Left household successfully.")
     }
 
     @Operation(summary = "Regenerar código de convite da casa", description = "Apenas o proprietário (OWNER) pode regenerar o código, invalidando o anterior.")
@@ -130,9 +130,9 @@ class HouseholdController(
         @AuthenticationPrincipal jwt: Jwt,
         @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String
     ): ApiResponse<InviteCodeResponseDto> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         val result = householdService.regenerateInviteCode(id, userId)
-        return ApiResponse.ok(result, "Código de convite regenerado com sucesso.")
+        return ApiResponse.ok(result, "Invite code regenerated successfully.")
     }
 
     @Operation(summary = "Remover membro da casa", description = "Apenas o proprietário (OWNER) pode remover outros membros da casa.")
@@ -142,8 +142,8 @@ class HouseholdController(
         @Parameter(description = "Identificador UUID da casa", required = true) @PathVariable id: String,
         @Parameter(description = "UUID do membro a ser removido", required = true) @PathVariable memberUserId: String
     ): ApiResponse<Unit> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.removeMember(id, userId, memberUserId)
-        return ApiResponse.ok("Membro removido da casa com sucesso.")
+        return ApiResponse.ok("Member removed from household successfully.")
     }
 }

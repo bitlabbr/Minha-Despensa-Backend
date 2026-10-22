@@ -63,12 +63,12 @@ class ProductMediaController(
         @RequestBody bytes: ByteArray,
         @RequestHeader(value = "Content-Type", defaultValue = "image/webp") contentType: String
     ): ApiResponse<Map<String, String>> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.requireHouseholdAccess(userId, householdId)
         val syncVersion = householdService.nextSyncVersion(householdId)
 
         val media = productMediaService.saveMedia(householdId, productId, bytes, contentType, syncVersion)
-        return ApiResponse.ok(mapOf("sha256Hash" to media.sha256Hash), "Imagem salva com sucesso.")
+        return ApiResponse.ok(mapOf("sha256Hash" to media.sha256Hash), "Image saved successfully.")
     }
 
     @Operation(summary = "Download de imagem do produto", description = "Retorna os bytes da imagem com suporte a ETag (304 Not Modified).")
@@ -79,11 +79,11 @@ class ProductMediaController(
         @PathVariable productId: String,
         @RequestHeader(value = "If-None-Match", required = false) ifNoneMatch: String?
     ): ResponseEntity<ByteArray> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.requireHouseholdAccess(userId, householdId)
 
         val media = productMediaService.getMedia(householdId, productId)
-            ?: throw ResourceNotFoundException("Imagem não encontrada para o produto $productId", "ProductMedia", productId)
+            ?: throw ResourceNotFoundException("Image not found for product $productId", "ProductMedia", productId)
 
         if (!ifNoneMatch.isNullOrBlank() && (ifNoneMatch == media.sha256Hash || ifNoneMatch == "\"${media.sha256Hash}\"")) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build()
@@ -102,10 +102,10 @@ class ProductMediaController(
         @Parameter(description = "Identificador da casa", required = true) @RequestHeader("X-Household-Id") householdId: String,
         @PathVariable productId: String
     ): ApiResponse<Unit> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.requireHouseholdAccess(userId, householdId)
 
         productMediaService.deleteMedia(householdId, productId)
-        return ApiResponse.ok("Imagem removida com sucesso.")
+        return ApiResponse.ok("Image removed successfully.")
     }
 }

@@ -201,7 +201,7 @@ class AuthServiceTest {
             authService.refreshToken(dto)
         }
 
-        assertTrue(ex.message!!.contains("reutilização"))
+        assertTrue(ex.message!!.contains("reuse", ignoreCase = true))
         verify(refreshTokenRepository).revokeAllInFamily(familyId)
     }
 }

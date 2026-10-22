@@ -31,37 +31,37 @@ import jakarta.validation.constraints.Size
 @Schema(description = "Payload para registro de novo usuário individual")
 data class RegisterRequestDto(
     @Schema(description = "Nome completo do usuário", example = "Willian Santos")
-    @NotBlank(message = "O nome é obrigatório")
-    @Size(max = 150, message = "O nome não pode exceder 150 caracteres")
+    @NotBlank(message = "Name is required")
+    @Size(min = 2, max = 80, message = "Name must be between 2 and 80 characters")
     val name: String,
 
     @Schema(description = "E-mail de acesso único", example = "willian@exemplo.com")
-    @NotBlank(message = "O e-mail é obrigatório")
-    @Email(message = "Formato de e-mail inválido")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
     val email: String,
 
     @Schema(description = "Senha de acesso (mínimo 8 caracteres)", example = "SegredoForte@123")
-    @NotBlank(message = "A senha é obrigatória")
-    @Size(min = 8, max = 100, message = "A senha deve ter no mínimo 8 caracteres")
+    @NotBlank(message = "Password is required")
+    @Size(min = 8, max = 100, message = "Password must be at least 8 characters")
     val password: String
 )
 
 @Schema(description = "Payload para autenticação (Login)")
 data class LoginRequestDto(
     @Schema(description = "E-mail cadastrado", example = "willian@exemplo.com")
-    @NotBlank(message = "O e-mail é obrigatório")
-    @Email(message = "Formato de e-mail inválido")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
     val email: String,
 
     @Schema(description = "Senha cadastrada", example = "SegredoForte@123")
-    @NotBlank(message = "A senha é obrigatória")
+    @NotBlank(message = "Password is required")
     val password: String
 )
 
 @Schema(description = "Payload para renovação de sessão por Refresh Token")
 data class RefreshTokenRequestDto(
     @Schema(description = "Refresh token opaco emitido no login/registro")
-    @NotBlank(message = "O refresh token é obrigatório")
+    @NotBlank(message = "Refresh token is required")
     val refreshToken: String
 )
 

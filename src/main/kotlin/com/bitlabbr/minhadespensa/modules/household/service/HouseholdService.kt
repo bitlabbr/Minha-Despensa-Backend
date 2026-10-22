@@ -59,12 +59,12 @@ class HouseholdService(
     @Transactional(readOnly = true)
     fun requireHouseholdAccess(userId: String, headerHouseholdId: String?): HouseholdContext {
         if (headerHouseholdId.isNullOrBlank()) {
-            throw InvalidRequestException("Header 'X-Household-Id' é obrigatório para acessar este recurso.")
+            throw InvalidRequestException("Header 'X-Household-Id' is required to access this resource.")
         }
 
         val membership = householdMemberRepository.findByHouseholdIdAndUserId(headerHouseholdId.trim(), userId)
             .orElseThrow {
-                ForbiddenException("Acesso negado: o usuário não é membro da casa '$headerHouseholdId'")
+                ForbiddenException("Access denied: user is not a member of household '$headerHouseholdId'")
             }
 
         return HouseholdContext(
@@ -79,11 +79,11 @@ class HouseholdService(
         val now = System.currentTimeMillis()
         val updatedRows = householdRepository.incrementSyncVersion(householdId, now)
         if (updatedRows == 0) {
-            throw ResourceNotFoundException("Casa não encontrada para incremento de versão", "Household", householdId)
+            throw ResourceNotFoundException("Household not found for version increment", "Household", householdId)
         }
 
         val household = householdRepository.findById(householdId)
-            .orElseThrow { ResourceNotFoundException("Casa não encontrada", "Household", householdId) }
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", householdId) }
 
         return household.syncVersion
     }
@@ -126,7 +126,7 @@ class HouseholdService(
             userRepository.save(user)
         }
 
-        logger.info("Nova casa criada: id=${savedHousehold.id}, name='${savedHousehold.name}', ownerId=$userId")
+        logger.info("New household created: id=${savedHousehold.id}, name='${savedHousehold.name}', ownerId=$userId")
         val members = loadMembersForHousehold(savedHousehold.id)
         return mapToDetailDto(savedHousehold, members)
     }
@@ -135,13 +135,13 @@ class HouseholdService(
     fun updateHousehold(householdId: String, userId: String, dto: UpdateHouseholdRequestDto): HouseholdDetailResponseDto {
         val context = requireHouseholdAccess(userId, householdId)
         val household = householdRepository.findById(context.householdId)
-            .orElseThrow { ResourceNotFoundException("Casa não encontrada", "Household", context.householdId) }
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", context.householdId) }
 
         household.name = dto.name.trim()
         household.updatedAt = System.currentTimeMillis()
         val updatedHousehold = householdRepository.save(household)
 
-        logger.info("Casa atualizada: id=${updatedHousehold.id}, name='${updatedHousehold.name}'")
+        logger.info("Household updated: id=${updatedHousehold.id}, name='${updatedHousehold.name}'")
         val members = loadMembersForHousehold(updatedHousehold.id)
         return mapToDetailDto(updatedHousehold, members)
     }
@@ -151,7 +151,7 @@ class HouseholdService(
         val cleanCode = dto.inviteCode.trim().uppercase()
         val household = householdRepository.findByInviteCodeIgnoreCase(cleanCode)
             .orElseThrow {
-                ResourceNotFoundException("Nenhuma casa encontrada com o código de convite '$cleanCode'")
+                ResourceNotFoundException("No household found with invite code '$cleanCode'")
             }
 
         val existingMember = householdMemberRepository.findByHouseholdIdAndUserId(household.id, userId)
@@ -162,7 +162,7 @@ class HouseholdService(
                 role = HouseholdRole.MEMBER
             )
             householdMemberRepository.save(newMember)
-            logger.info("Usuário $userId ingressou na casa ${household.id} via código de convite $cleanCode")
+            logger.info("User $userId joined household ${household.id} via invite code $cleanCode")
         }
 
         // Define a casa recém-ingressada como a default do usuário
@@ -179,17 +179,17 @@ class HouseholdService(
     @Transactional
     fun leaveHousehold(householdId: String, userId: String) {
         val membership = householdMemberRepository.findByHouseholdIdAndUserId(householdId, userId)
-            .orElseThrow { ResourceNotFoundException("Membro não encontrado nesta casa") }
+            .orElseThrow { ResourceNotFoundException("Member not found in this household") }
 
         if (membership.role == HouseholdRole.OWNER) {
             val otherMembers = householdMemberRepository.findByHouseholdId(householdId).filter { it.userId != userId }
             if (otherMembers.isNotEmpty()) {
-                throw BusinessException("O proprietário da casa não pode sair enquanto houver outros membros. Transfira a posse antes de sair.")
+                throw BusinessException("The household owner cannot leave while other members exist. Transfer ownership before leaving.")
             }
         }
 
         householdMemberRepository.deleteByHouseholdIdAndUserId(householdId, userId)
-        logger.info("Usuário $userId saiu da casa $householdId")
+        logger.info("User $userId left household $householdId")
 
         // Se era a casa default do usuário, redefine para outra casa disponível
         val user = userRepository.findById(userId).orElse(null)
@@ -204,18 +204,18 @@ class HouseholdService(
     fun regenerateInviteCode(householdId: String, userId: String): InviteCodeResponseDto {
         val context = requireHouseholdAccess(userId, householdId)
         if (context.role != HouseholdRole.OWNER) {
-            throw ForbiddenException("Apenas o proprietário da casa pode regenerar o código de convite")
+            throw ForbiddenException("Only the household owner can regenerate the invite code")
         }
 
         val household = householdRepository.findById(context.householdId)
-            .orElseThrow { ResourceNotFoundException("Casa não encontrada", "Household", context.householdId) }
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", context.householdId) }
 
         val newCode = generateUniqueInviteCode()
         household.inviteCode = newCode
         household.updatedAt = System.currentTimeMillis()
         householdRepository.save(household)
 
-        logger.info("Código de convite regenerado para a casa ${household.id}: novo código=$newCode")
+        logger.info("Invite code regenerated for household ${household.id}: new code=$newCode")
         return InviteCodeResponseDto(inviteCode = newCode)
     }
 
@@ -223,15 +223,15 @@ class HouseholdService(
     fun removeMember(householdId: String, ownerUserId: String, targetUserId: String) {
         val context = requireHouseholdAccess(ownerUserId, householdId)
         if (context.role != HouseholdRole.OWNER) {
-            throw ForbiddenException("Apenas o proprietário da casa pode remover outros membros")
+            throw ForbiddenException("Only the household owner can remove members")
         }
 
         if (ownerUserId == targetUserId) {
-            throw BusinessException("O proprietário não pode se auto-remover da casa. Utilize a opção de sair.")
+            throw BusinessException("The owner cannot remove themselves from the household. Use the leave option instead.")
         }
 
         householdMemberRepository.deleteByHouseholdIdAndUserId(householdId, targetUserId)
-        logger.info("Proprietário $ownerUserId removeu o membro $targetUserId da casa $householdId")
+        logger.info("Owner $ownerUserId removed member $targetUserId from household $householdId")
 
         val targetUser = userRepository.findById(targetUserId).orElse(null)
         if (targetUser != null && targetUser.defaultHouseholdId == householdId) {

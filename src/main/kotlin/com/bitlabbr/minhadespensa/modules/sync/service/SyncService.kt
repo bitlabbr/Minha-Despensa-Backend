@@ -210,8 +210,8 @@ class SyncService(
 
         val serverTimestamp = System.currentTimeMillis()
         logger.info(
-            "Sync PUSH concluído com sucesso para casa $householdId: $count processados, " +
-                "${productIdMappings.size} produtos remapeados, ${rejected.size} rejeitados (versão=$syncVersion)"
+            "Push sync completed successfully for household $householdId: $count processed, " +
+                "${productIdMappings.size} products remapped, ${rejected.size} rejected (version=$syncVersion)"
         )
 
         return SyncPushResponseDto(
@@ -227,7 +227,7 @@ class SyncService(
     @Transactional(readOnly = true)
     fun pull(householdId: String, sinceVersion: Long): SyncPullResponseDto {
         val currentHousehold = householdRepository.findById(householdId)
-            .orElseThrow { ResourceNotFoundException("Casa com ID '$householdId' não encontrada.", "Household", householdId) }
+            .orElseThrow { ResourceNotFoundException("Household with ID '$householdId' not found.", "Household", householdId) }
 
         val categories = productCategoryService.getModifiedSince(householdId, sinceVersion)
             .map { ProductCategorySyncDto.fromEntity(it) }
@@ -250,8 +250,8 @@ class SyncService(
             pantryItems.size + priceEntries.size + movements.size + budgets.size
 
         logger.info(
-            "Sync PULL concluído para casa $householdId: $total registros alterados desde versão $sinceVersion " +
-                "(versãoAtual=${currentHousehold.syncVersion})"
+            "Pull sync completed for household $householdId: $total records modified since version $sinceVersion " +
+                "(currentVersion=${currentHousehold.syncVersion})"
         )
 
         return SyncPullResponseDto(

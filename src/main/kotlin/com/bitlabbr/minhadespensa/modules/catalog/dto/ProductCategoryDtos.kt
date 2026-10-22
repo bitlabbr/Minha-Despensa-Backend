@@ -33,7 +33,7 @@ data class ProductCategorySyncDto(
     val id: String,
 
     @Schema(description = "Nome de exibição da categoria", example = "Laticínios")
-    @NotBlank(message = "O nome da categoria é obrigatório")
+    @NotBlank(message = "Category name is required")
     val name: String,
 
     @Schema(description = "Indica se é uma categoria padrão do sistema", example = "true")

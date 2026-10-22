@@ -36,7 +36,7 @@ class HouseholdEntity(
     @Column(name = "id", nullable = false, length = 36)
     var id: String = UUID.randomUUID().toString(),
 
-    @Column(name = "name", nullable = false, length = 150)
+    @Column(name = "name", nullable = false, length = 80)
     var name: String = "",
 
     @Column(name = "invite_code", nullable = false, length = 32, unique = true)

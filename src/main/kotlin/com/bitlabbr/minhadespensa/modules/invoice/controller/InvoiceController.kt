@@ -73,9 +73,9 @@ class InvoiceController(
     fun parseInvoice(
         @Valid @RequestBody request: InvoiceParseRequestDto
     ): ResponseEntity<InvoiceResponseDto> {
-        logger.info("Iniciando extração de nota fiscal. Tamanho do payload do QR Code: {} caracteres", request.qrCodeContent.length)
+        logger.info("Starting invoice extraction. QR Code payload size: {} characters", request.qrCodeContent.length)
         val result = invoiceParseService.parseInvoiceFromQrCode(request.qrCodeContent)
-        logger.info("Extração da nota fiscal concluída com sucesso: {} itens extraídos da loja '{}'", result.items.size, result.storeName)
+        logger.info("Invoice extraction completed successfully: {} items extracted from store '{}'", result.items.size, result.storeName)
         return ResponseEntity.ok(result)
     }
 }

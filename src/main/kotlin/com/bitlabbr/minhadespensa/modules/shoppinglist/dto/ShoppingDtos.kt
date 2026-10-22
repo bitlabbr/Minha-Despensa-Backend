@@ -37,8 +37,8 @@ data class ShoppingListRequestDto(
     val id: String? = null,
 
     @Schema(description = "Nome da lista de compras", example = "Compras do Mês")
-    @NotBlank(message = "O nome da lista é obrigatório")
-    @Size(max = 255, message = "O nome da lista não pode exceder 255 caracteres")
+    @NotBlank(message = "List name is required")
+    @Size(max = 255, message = "List name must not exceed 255 characters")
     val name: String,
 
     @Schema(description = "Tipo da lista", example = "PLANNED")
@@ -108,14 +108,14 @@ data class ShoppingItemRequestDto(
     val id: String? = null,
 
     @Schema(description = "ID da lista de compras associada", example = "4fa85f64-5717-4562-b3fc-2c963f66afa7")
-    @NotBlank(message = "O ID da lista é obrigatório")
+    @NotBlank(message = "List ID is required")
     val listId: String,
 
     @Schema(description = "ID do produto do catálogo, se houver vínculo", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
     val productId: String? = null,
 
     @Schema(description = "Texto livre caso o item não esteja no catálogo", example = "Comprar pão francês quentinho")
-    @Size(max = 255, message = "O texto livre não pode exceder 255 caracteres")
+    @Size(max = 255, message = "Raw text must not exceed 255 characters")
     val rawText: String? = null,
 
     @Schema(description = "Quantidade", example = "2.0")

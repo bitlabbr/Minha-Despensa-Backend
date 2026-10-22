@@ -70,11 +70,11 @@ class SyncController(
         @Parameter(description = "Identificador da casa", required = true) @RequestHeader("X-Household-Id") householdId: String,
         @Valid @RequestBody request: SyncPushRequestDto
     ): ApiResponse<SyncPushResponseDto> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.requireHouseholdAccess(userId, householdId)
 
         val result = syncService.push(householdId, request)
-        return ApiResponse.ok(result, "Sincronização concluída com sucesso.")
+        return ApiResponse.ok(result, "Sync completed successfully.")
     }
 
     @Operation(
@@ -94,7 +94,7 @@ class SyncController(
         @RequestParam(defaultValue = "0", name = "sinceVersion") sinceVersion: Long,
         @RequestParam(defaultValue = "0", name = "since", required = false) fallbackSince: Long
     ): ApiResponse<SyncPullResponseDto> {
-        val userId = requireNotNull(jwt.subject) { "Identificador de usuário ausente no token" }
+        val userId = requireNotNull(jwt.subject) { "User identifier missing from token" }
         householdService.requireHouseholdAccess(userId, householdId)
 
         val effectiveVersion = if (sinceVersion > 0L) sinceVersion else fallbackSince

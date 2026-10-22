@@ -5,7 +5,7 @@
 -- 1. Usuários e Autenticação
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
+    name VARCHAR(80) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     default_household_id VARCHAR(36),
@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family_id ON refresh_tokens(family
 -- 2. Casas Compartilhadas (Households) e Membros
 CREATE TABLE IF NOT EXISTS households (
     id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(150) NOT NULL,
+    name VARCHAR(80) NOT NULL,
     invite_code VARCHAR(32) NOT NULL UNIQUE,
     owner_id VARCHAR(36) NOT NULL REFERENCES users(id),
     sync_version BIGINT NOT NULL DEFAULT 0,
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS catalog_products (
     name VARCHAR(255) NOT NULL,
     normalized_name VARCHAR(255) NOT NULL,
     category VARCHAR(100) NOT NULL DEFAULT 'Geral',
-    brand VARCHAR(150),
+    brand VARCHAR(80),
     measure_unit VARCHAR(30) NOT NULL DEFAULT 'UNIT',
     net_weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     thumbnail_url VARCHAR(1024),

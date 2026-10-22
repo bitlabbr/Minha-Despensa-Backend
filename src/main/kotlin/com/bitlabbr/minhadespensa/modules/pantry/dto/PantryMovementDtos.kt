@@ -37,7 +37,7 @@ data class PantryMovementSyncDto(
     val pantryItemId: String? = null,
 
     @Schema(description = "UUID do produto no catálogo", example = "550e8400-e29b-41d4-a716-446655440002")
-    @NotBlank(message = "O ID do produto é obrigatório")
+    @NotBlank(message = "Product ID is required")
     val productId: String,
 
     @Schema(description = "Tipo de movimentação de estoque", example = "ENTRY_PURCHASE")

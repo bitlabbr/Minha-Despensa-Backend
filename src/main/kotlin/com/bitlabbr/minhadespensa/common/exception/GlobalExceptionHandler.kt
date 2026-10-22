@@ -45,11 +45,11 @@ class GlobalExceptionHandler {
         ex: ResourceNotFoundException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[404 Not Found] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[404 Not Found] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.NOT_FOUND.value(),
             error = HttpStatus.NOT_FOUND.reasonPhrase,
-            message = ex.message ?: "Recurso não encontrado",
+            message = ex.message ?: "Resource not found",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse)
@@ -60,11 +60,11 @@ class GlobalExceptionHandler {
         ex: ConflictException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[409 Conflict] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[409 Conflict] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.CONFLICT.value(),
             error = HttpStatus.CONFLICT.reasonPhrase,
-            message = ex.message ?: "Conflito de dados",
+            message = ex.message ?: "Data conflict",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse)
@@ -75,11 +75,11 @@ class GlobalExceptionHandler {
         ex: UnauthorizedException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[401 Unauthorized] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[401 Unauthorized] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.UNAUTHORIZED.value(),
             error = HttpStatus.UNAUTHORIZED.reasonPhrase,
-            message = ex.message ?: "Não autenticado",
+            message = ex.message ?: "Unauthorized",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse)
@@ -90,11 +90,11 @@ class GlobalExceptionHandler {
         ex: ForbiddenException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[403 Forbidden] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[403 Forbidden] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.FORBIDDEN.value(),
             error = HttpStatus.FORBIDDEN.reasonPhrase,
-            message = ex.message ?: "Acesso negado",
+            message = ex.message ?: "Access denied",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse)
@@ -105,11 +105,11 @@ class GlobalExceptionHandler {
         ex: MissingRequestHeaderException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[400 Bad Request] Header obrigatório ausente em {}: {}", request.requestURI, ex.headerName)
+        logger.warn("[400 Bad Request] Required header missing at {}: {}", request.requestURI, ex.headerName)
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
-            message = "O header obrigatório '${ex.headerName}' não foi fornecido.",
+            message = "Required header '${ex.headerName}' is missing.",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
@@ -120,11 +120,11 @@ class GlobalExceptionHandler {
         ex: Exception,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[400 Bad Request] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[400 Bad Request] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
-            message = ex.message ?: "Requisição inválida",
+            message = ex.message ?: "Invalid request",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
@@ -135,11 +135,11 @@ class GlobalExceptionHandler {
         ex: Exception,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[422 Unprocessable Entity] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[422 Unprocessable Entity] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.UNPROCESSABLE_ENTITY.value(),
             error = HttpStatus.UNPROCESSABLE_ENTITY.reasonPhrase,
-            message = ex.message ?: "Violação de regra de negócio",
+            message = ex.message ?: "Business rule violation",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse)
@@ -153,15 +153,15 @@ class GlobalExceptionHandler {
         val fieldErrors = ex.bindingResult.fieldErrors.map {
             FieldErrorDetail(
                 field = it.field,
-                message = it.defaultMessage ?: "Valor inválido"
+                message = it.defaultMessage ?: "Invalid value"
             )
         }
-        logger.warn("[400 Validation Error] em {}: {} campos com erro", request.requestURI, fieldErrors.size)
+        logger.warn("[400 Validation Error] at {}: {} field(s) with errors", request.requestURI, fieldErrors.size)
 
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
-            message = "Erro de validação nos campos informados",
+            message = "Validation error in submitted fields",
             path = request.requestURI,
             fieldErrors = fieldErrors
         )
@@ -173,11 +173,11 @@ class GlobalExceptionHandler {
         ex: HttpMessageNotReadableException,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.warn("[400 Not Readable] em {}: {}", request.requestURI, ex.message)
+        logger.warn("[400 Not Readable] at {}: {}", request.requestURI, ex.message)
         val errorResponse = ErrorResponse(
             status = HttpStatus.BAD_REQUEST.value(),
             error = HttpStatus.BAD_REQUEST.reasonPhrase,
-            message = "Corpo da requisição ausente ou em formato inválido",
+            message = "Request body is missing or unreadable",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
@@ -188,11 +188,11 @@ class GlobalExceptionHandler {
         ex: Exception,
         request: HttpServletRequest
     ): ResponseEntity<ErrorResponse> {
-        logger.error("Erro interno não tratado ao processar requisição em ${request.requestURI}", ex)
+        logger.error("Unhandled internal server error while processing request at ${request.requestURI}", ex)
         val errorResponse = ErrorResponse(
             status = HttpStatus.INTERNAL_SERVER_ERROR.value(),
             error = HttpStatus.INTERNAL_SERVER_ERROR.reasonPhrase,
-            message = "Ocorreu um erro interno inesperado no servidor.",
+            message = "An unexpected internal server error occurred.",
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse)

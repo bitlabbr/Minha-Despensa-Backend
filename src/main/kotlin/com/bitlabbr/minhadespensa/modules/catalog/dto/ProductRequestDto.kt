@@ -39,24 +39,24 @@ data class ProductRequestDto(
     val id: String? = null,
 
     @Schema(description = "Código de barras (EAN-8, EAN-13, EAN-14)", example = "7891000100103")
-    @Size(max = 32, message = "O EAN não pode ter mais de 32 caracteres")
+    @Size(max = 32, message = "EAN must not exceed 32 characters")
     @JsonAlias("codigoBarras", "codigo_barras")
     val ean: String? = null,
 
     @Schema(description = "Nome do produto", example = "Arroz Branco Tipo 1 5kg")
-    @NotBlank(message = "O nome do produto é obrigatório")
-    @Size(max = 255, message = "O nome não pode exceder 255 caracteres")
+    @NotBlank(message = "Product name is required")
+    @Size(max = 255, message = "Product name must not exceed 255 characters")
     @JsonAlias("nome")
     val name: String,
 
     @Schema(description = "Categoria do produto", example = "Mercearia")
-    @NotBlank(message = "A categoria é obrigatória")
-    @Size(max = 100, message = "A categoria não pode exceder 100 caracteres")
+    @NotBlank(message = "Category is required")
+    @Size(max = 100, message = "Category must not exceed 100 characters")
     @JsonAlias("categoria")
     val category: String = "Geral",
 
     @Schema(description = "Marca do produto", example = "Camil")
-    @Size(max = 150, message = "A marca não pode exceder 150 caracteres")
+    @Size(max = 80, message = "Brand must not exceed 80 characters")
     @JsonAlias("marca")
     val brand: String? = null,
 
@@ -65,7 +65,7 @@ data class ProductRequestDto(
     val measureUnit: MeasureUnit = MeasureUnit.UNIT,
 
     @Schema(description = "Peso líquido ou quantidade nominal na embalagem", example = "5.0")
-    @Positive(message = "O peso líquido deve ser maior que zero")
+    @Positive(message = "Net weight must be greater than zero")
     @JsonAlias("pesoLiquido", "peso_liquido")
     val netWeight: Double = 1.0,
 

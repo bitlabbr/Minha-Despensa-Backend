@@ -41,7 +41,7 @@ class TestController {
         return mapOf(
             "status" to "UP",
             "app" to "Minha Despensa Backend",
-            "message" to "Servidor online e rodando no Domus!",
+            "message" to "Server online and running on Domus!",
             "timestamp" to LocalDateTime.now().toString()
         )
     }

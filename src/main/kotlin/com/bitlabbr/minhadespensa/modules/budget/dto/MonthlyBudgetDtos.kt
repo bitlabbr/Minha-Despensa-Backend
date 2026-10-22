@@ -34,12 +34,12 @@ data class MonthlyBudgetSyncDto(
     val id: String? = null,
 
     @Schema(description = "Ano de referência", example = "2026")
-    @Min(value = 2000, message = "O ano deve ser maior ou igual a 2000")
+    @Min(value = 2000, message = "Year must be greater than or equal to 2000")
     val year: Int,
 
     @Schema(description = "Mês de referência (1 a 12)", example = "10")
-    @Min(value = 1, message = "O mês deve ser entre 1 e 12")
-    @Max(value = 12, message = "O mês deve ser entre 1 e 12")
+    @Min(value = 1, message = "Month must be between 1 and 12")
+    @Max(value = 12, message = "Month must be between 1 and 12")
     val month: Int,
 
     @Schema(description = "Valor orçado em centavos de real (R$ 1.500,00 = 150000)", example = "150000")

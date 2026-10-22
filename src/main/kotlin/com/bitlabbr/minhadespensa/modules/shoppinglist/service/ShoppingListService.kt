@@ -81,7 +81,7 @@ class ShoppingListService(
                 existing.isDeleted = dto.isDeleted
                 existing
             } else {
-                logger.debug("LWW ignorou atualização de lista $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
+                logger.debug("LWW ignored update for shopping list $targetId: current=${existing.updatedAt} > incoming=$incomingUpdatedAt")
                 existing
             }
         } else {
@@ -111,7 +111,7 @@ class ShoppingListService(
                     item.serverVersion = syncVersion
                 }
                 shoppingItemRepository.saveAll(modifiedItems)
-                logger.info("Cascade tombstone propagado para ${modifiedItems.size} itens da lista ${saved.id} na casa $householdId")
+                logger.info("Cascade tombstone propagated to ${modifiedItems.size} items for shopping list ${saved.id} in household $householdId")
             }
         }
 
@@ -122,7 +122,7 @@ class ShoppingListService(
     @Transactional
     fun deleteList(householdId: String, id: String, syncVersion: Long = 0L) {
         val list = shoppingListRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, id)
-            .orElseThrow { ResourceNotFoundException("Lista de compras com ID '$id' não encontrada para exclusão.", "ShoppingList", id) }
+            .orElseThrow { ResourceNotFoundException("Shopping list with ID '$id' not found for deletion.", "ShoppingList", id) }
 
         val now = System.currentTimeMillis()
         list.isDeleted = true
@@ -138,7 +138,7 @@ class ShoppingListService(
             it.serverVersion = syncVersion
         }
         shoppingItemRepository.saveAll(items)
-        logger.info("Lista de compras $id e seus ${items.size} itens foram marcados como excluídos na casa $householdId.")
+        logger.info("Shopping list $id and its ${items.size} items marked as deleted in household $householdId.")
     }
 
     @Transactional
@@ -168,7 +168,7 @@ class ShoppingListService(
                 existing.isDeleted = effectiveIsDeleted
                 existing
             } else {
-                logger.debug("LWW ignorou atualização de item $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
+                logger.debug("LWW ignored update for shopping item $targetId: current=${existing.updatedAt} > incoming=$incomingUpdatedAt")
                 existing
             }
         } else {

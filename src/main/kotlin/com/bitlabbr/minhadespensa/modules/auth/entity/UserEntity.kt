@@ -36,7 +36,7 @@ class UserEntity(
     @Column(name = "id", nullable = false, length = 36)
     var id: String = UUID.randomUUID().toString(),
 
-    @Column(name = "name", nullable = false, length = 150)
+    @Column(name = "name", nullable = false, length = 80)
     var name: String = "",
 
     @Column(name = "email", nullable = false, length = 255, unique = true)

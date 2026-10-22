@@ -81,7 +81,7 @@ class PantryService(
                 existing.isDeleted = dto.isDeleted
                 pantryItemRepository.save(existing)
             } else {
-                logger.debug("LWW ignorou atualização de item $targetId: atual=${existing.updatedAt} > recebido=$incomingUpdatedAt")
+                logger.debug("LWW ignored update for pantry item $targetId: current=${existing.updatedAt} > incoming=$incomingUpdatedAt")
                 existing
             }
         } else {
@@ -106,13 +106,13 @@ class PantryService(
     @Transactional
     fun deleteItem(householdId: String, id: String, syncVersion: Long = 0L) {
         val entity = pantryItemRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, id)
-            .orElseThrow { ResourceNotFoundException("Item de despensa com ID '$id' não encontrado para exclusão.", "PantryItem", id) }
+            .orElseThrow { ResourceNotFoundException("Pantry item with ID '$id' not found for deletion.", "PantryItem", id) }
 
         entity.isDeleted = true
         entity.updatedAt = System.currentTimeMillis()
         entity.serverVersion = syncVersion
         pantryItemRepository.save(entity)
-        logger.info("Item de despensa $id marcado como excluído na casa $householdId.")
+        logger.info("Pantry item $id marked as deleted in household $householdId.")
     }
 
     @Transactional(readOnly = true)

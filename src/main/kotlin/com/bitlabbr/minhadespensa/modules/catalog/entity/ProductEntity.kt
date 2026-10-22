@@ -62,7 +62,7 @@ class ProductEntity(
     @Column(name = "category", nullable = false, length = 100)
     var category: String = "Geral",
 
-    @Column(name = "brand", length = 150, nullable = true)
+    @Column(name = "brand", length = 80, nullable = true)
     var brand: String? = null,
 
     @Enumerated(EnumType.STRING)

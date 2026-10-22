@@ -158,12 +158,12 @@ data class PantryItemRequestDto(
     val id: String? = null,
 
     @Schema(description = "ID do produto associado no catálogo", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
-    @NotBlank(message = "O ID do produto é obrigatório")
+    @NotBlank(message = "Product ID is required")
     @JsonAlias("produtoId", "produto_id")
     val productId: String,
 
     @Schema(description = "Quantidade disponível na despensa", example = "2.0")
-    @PositiveOrZero(message = "A quantidade deve ser zero ou positiva")
+    @PositiveOrZero(message = "Quantity must be zero or positive")
     @JsonAlias("quantidade")
     val quantity: Double = 1.0,
 

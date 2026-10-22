@@ -123,7 +123,7 @@ class ProductService(
         return if (canonical != null) {
             if (canonical.id != targetId) {
                 // Colisão / Deduplicação: o ID recebido aponta para um canônico existente com outro ID
-                logger.info("Deduplicando produto $targetId para canônico ${canonical.id} na casa $householdId")
+                logger.info("Deduplicating product $targetId to canonical ${canonical.id} in household $householdId")
                 aliasRepository.save(
                     EntityIdAliasEntity(
                         householdId = householdId,
@@ -171,7 +171,7 @@ class ProductService(
                     canonical.isDeleted = dto.isDeleted
                     productRepository.save(canonical)
                 } else {
-                    logger.debug("LWW descartou atualização em ${canonical.id}: servidor=${canonical.updatedAt} > recebido=$incomingUpdatedAt")
+                    logger.debug("LWW discarded update on ${canonical.id}: server=${canonical.updatedAt} > incoming=$incomingUpdatedAt")
                     canonical
                 }
                 ProductUpsertResult(entity = saved, canonicalId = canonical.id, remappedFromId = targetId)
@@ -194,7 +194,7 @@ class ProductService(
                     canonical.isDeleted = dto.isDeleted
                     productRepository.save(canonical)
                 } else {
-                    logger.debug("LWW descartou atualização em ${canonical.id}: servidor=${canonical.updatedAt} > recebido=$incomingUpdatedAt")
+                    logger.debug("LWW discarded update on ${canonical.id}: server=${canonical.updatedAt} > incoming=$incomingUpdatedAt")
                     canonical
                 }
                 ProductUpsertResult(entity = saved, canonicalId = canonical.id, remappedFromId = null)
@@ -227,13 +227,13 @@ class ProductService(
     @Transactional
     fun deleteProduct(householdId: String, id: String, syncVersion: Long = 0L) {
         val entity = productRepository.findByHouseholdIdAndIdAndIsDeletedFalse(householdId, id)
-            .orElseThrow { ResourceNotFoundException("Produto com ID '$id' não encontrado para exclusão.", "Product", id) }
+            .orElseThrow { ResourceNotFoundException("Product with ID '$id' not found for deletion.", "Product", id) }
 
         entity.isDeleted = true
         entity.updatedAt = System.currentTimeMillis()
         entity.serverVersion = syncVersion
         productRepository.save(entity)
-        logger.info("Produto $id da casa $householdId marcado como excluído (soft-delete).")
+        logger.info("Product $id in household $householdId marked as deleted (soft-delete).")
     }
 
     @Transactional(readOnly = true)
