@@ -30,6 +30,7 @@ import com.bitlabbr.minhadespensa.modules.sync.entity.EntityIdAliasEntity
 import com.bitlabbr.minhadespensa.modules.sync.repository.EntityIdAliasRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -95,5 +96,32 @@ class ProductCategoryServiceTest {
         assertEquals("temp-cat-2", result.aliasId)
         verify(aliasRepository).save(any<EntityIdAliasEntity>())
         verify(categoryRepository).save(existing)
+    }
+
+    @Test
+    fun `seedDefaultCategories should generate 9 default categories when none exist`() {
+        whenever(categoryRepository.findByHouseholdIdAndIsDeletedFalse("house-1")).thenReturn(emptyList())
+        whenever(categoryRepository.saveAll(any<List<ProductCategoryEntity>>())).thenAnswer { it.arguments[0] }
+
+        val seeded = categoryService.seedDefaultCategories("house-1")
+
+        assertEquals(9, seeded.size)
+        assertTrue(seeded.all { it.isDefault })
+        assertEquals("default_category_0", seeded[0].id)
+        assertEquals("Cereais e Grãos", seeded[0].name)
+        assertEquals("cereais e graos", seeded[0].normalizedName)
+        verify(categoryRepository).saveAll(any<List<ProductCategoryEntity>>())
+    }
+
+    @Test
+    fun `seedDefaultCategories should return existing categories without overwriting`() {
+        val existing = listOf(ProductCategoryEntity(householdId = "house-1", id = "cat-1", name = "Bebidas"))
+        whenever(categoryRepository.findByHouseholdIdAndIsDeletedFalse("house-1")).thenReturn(existing)
+
+        val seeded = categoryService.seedDefaultCategories("house-1")
+
+        assertEquals(1, seeded.size)
+        assertEquals("cat-1", seeded[0].id)
+        org.mockito.kotlin.verify(categoryRepository, org.mockito.kotlin.never()).saveAll(any<List<ProductCategoryEntity>>())
     }
 }

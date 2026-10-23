@@ -132,4 +132,38 @@ class ProductCategoryService(
     fun getModifiedSince(householdId: String, sinceVersion: Long): List<ProductCategoryEntity> {
         return categoryRepository.findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(householdId, sinceVersion)
     }
+
+    @Transactional
+    fun seedDefaultCategories(householdId: String): List<ProductCategoryEntity> {
+        val existing = categoryRepository.findByHouseholdIdAndIsDeletedFalse(householdId)
+        if (existing.isNotEmpty()) return existing
+
+        val entities = DEFAULT_CATEGORIES.mapIndexed { index, name ->
+            ProductCategoryEntity(
+                householdId = householdId,
+                id = "default_category_$index",
+                name = name,
+                normalizedName = DeterministicIdUtils.normalizeText(name),
+                isDefault = true,
+                updatedAt = 1000L,
+                serverVersion = 1L,
+                isDeleted = false
+            )
+        }
+        return categoryRepository.saveAll(entities)
+    }
+
+    companion object {
+        val DEFAULT_CATEGORIES = listOf(
+            "Cereais e Grãos",
+            "Carnes e Proteínas",
+            "Laticínios e Ovos",
+            "Hortifrúti",
+            "Bebidas",
+            "Produtos de Limpeza",
+            "Higiene Pessoal",
+            "Temperos e Condimentos",
+            "Outros"
+        )
+    }
 }

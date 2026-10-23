@@ -28,6 +28,7 @@ import com.bitlabbr.minhadespensa.common.exception.ForbiddenException
 import com.bitlabbr.minhadespensa.common.exception.InvalidRequestException
 import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
 import com.bitlabbr.minhadespensa.modules.auth.repository.UserRepository
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
 import com.bitlabbr.minhadespensa.modules.household.domain.HouseholdRole
 import com.bitlabbr.minhadespensa.modules.household.dto.CreateHouseholdRequestDto
 import com.bitlabbr.minhadespensa.modules.household.dto.HouseholdDetailResponseDto
@@ -49,7 +50,8 @@ import java.security.SecureRandom
 class HouseholdService(
     private val householdRepository: HouseholdRepository,
     private val householdMemberRepository: HouseholdMemberRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val productCategoryService: ProductCategoryService
 ) {
 
     private val logger = LoggerFactory.getLogger(HouseholdService::class.java)
@@ -125,7 +127,8 @@ class HouseholdService(
         val household = HouseholdEntity(
             name = dto.name.trim(),
             inviteCode = generateUniqueInviteCode(),
-            ownerId = user.id
+            ownerId = user.id,
+            syncVersion = 1L
         )
         val savedHousehold = householdRepository.save(household)
 
@@ -135,6 +138,8 @@ class HouseholdService(
             role = HouseholdRole.OWNER
         )
         householdMemberRepository.save(member)
+
+        productCategoryService.seedDefaultCategories(savedHousehold.id)
 
         if (user.defaultHouseholdId.isNullOrBlank()) {
             user.defaultHouseholdId = savedHousehold.id

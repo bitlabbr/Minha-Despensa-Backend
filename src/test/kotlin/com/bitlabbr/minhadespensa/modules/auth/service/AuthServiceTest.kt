@@ -33,6 +33,7 @@ import com.bitlabbr.minhadespensa.modules.auth.entity.UserEntity
 import com.bitlabbr.minhadespensa.modules.auth.repository.RefreshTokenRepository
 import com.bitlabbr.minhadespensa.modules.auth.repository.UserRepository
 import com.bitlabbr.minhadespensa.modules.auth.security.JwtTokenService
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
 import com.bitlabbr.minhadespensa.modules.household.domain.HouseholdRole
 import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdEntity
 import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdMemberEntity
@@ -58,6 +59,7 @@ class AuthServiceTest {
     private val refreshTokenRepository: RefreshTokenRepository = mock()
     private val householdRepository: HouseholdRepository = mock()
     private val householdMemberRepository: HouseholdMemberRepository = mock()
+    private val productCategoryService: ProductCategoryService = mock()
     private val passwordEncoder: PasswordEncoder = mock()
     private val jwtTokenService: JwtTokenService = mock()
 
@@ -70,6 +72,7 @@ class AuthServiceTest {
             refreshTokenRepository = refreshTokenRepository,
             householdRepository = householdRepository,
             householdMemberRepository = householdMemberRepository,
+            productCategoryService = productCategoryService,
             passwordEncoder = passwordEncoder,
             jwtTokenService = jwtTokenService,
             refreshExpirationMs = 2592000000L
@@ -123,6 +126,7 @@ class AuthServiceTest {
         verify(userRepository, org.mockito.kotlin.times(2)).save(any<UserEntity>())
         verify(householdRepository).save(any<HouseholdEntity>())
         verify(householdMemberRepository).save(any<HouseholdMemberEntity>())
+        verify(productCategoryService).seedDefaultCategories("house-1")
         verify(refreshTokenRepository).save(any<RefreshTokenEntity>())
     }
 

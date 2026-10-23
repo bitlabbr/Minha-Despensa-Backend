@@ -86,7 +86,7 @@ com.bitlabbr.minhadespensa
 ### 3.1. Autenticação (`/api/v1/auth`)
 | Método | Endpoint | Autenticação | Descrição |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/register` | Aberto | Cria usuário, senha com hash BCrypt e casa pessoal inicial |
+| `POST` | `/api/v1/auth/register` | Aberto | Cria usuário, senha com hash BCrypt, casa pessoal inicial e inicializa 9 categorias padrão |
 | `POST` | `/api/v1/auth/login` | Aberto | Autentica e emite par de tokens (Access JWT + Refresh Token) |
 | `POST` | `/api/v1/auth/refresh` | Aberto | Rotação de refresh token com detecção de reuso |
 | `POST` | `/api/v1/auth/logout` | Requer Bearer Auth | Revoga o refresh token ativo do dispositivo |
@@ -97,7 +97,7 @@ com.bitlabbr.minhadespensa
 | :--- | :--- | :--- |
 | `GET` | `/api/v1/households` | Lista todas as casas em que o usuário autenticado é membro |
 | `GET` | `/api/v1/households/{id}` | Retorna os detalhes e integrantes de uma casa específica |
-| `POST` | `/api/v1/households` | Cria uma nova casa e define o usuário como `OWNER` |
+| `POST` | `/api/v1/households` | Cria uma nova casa, define o usuário como `OWNER` e inicializa 9 categorias padrão |
 | `PUT` | `/api/v1/households/{id}` | Renomeia uma casa (requer privilégio de membro) |
 | `POST` | `/api/v1/households/join` | Ingressa em uma casa via código de convite `CASA-XXXXXXXX` |
 | `POST`, `DELETE` | `/api/v1/households/{id}/leave` | Sai de uma casa compartilhada |

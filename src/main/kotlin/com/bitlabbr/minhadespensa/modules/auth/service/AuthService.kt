@@ -37,6 +37,7 @@ import com.bitlabbr.minhadespensa.modules.auth.entity.UserEntity
 import com.bitlabbr.minhadespensa.modules.auth.repository.RefreshTokenRepository
 import com.bitlabbr.minhadespensa.modules.auth.repository.UserRepository
 import com.bitlabbr.minhadespensa.modules.auth.security.JwtTokenService
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
 import com.bitlabbr.minhadespensa.modules.household.domain.HouseholdRole
 import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdEntity
 import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdMemberEntity
@@ -56,6 +57,7 @@ class AuthService(
     private val refreshTokenRepository: RefreshTokenRepository,
     private val householdRepository: HouseholdRepository,
     private val householdMemberRepository: HouseholdMemberRepository,
+    private val productCategoryService: ProductCategoryService,
     private val passwordEncoder: PasswordEncoder,
     private val jwtTokenService: JwtTokenService,
     @Value("\${app.jwt.refresh-expiration-ms:2592000000}")
@@ -86,7 +88,8 @@ class AuthService(
         val household = HouseholdEntity(
             name = "Despensa de $firstName",
             inviteCode = generateUniqueInviteCode(),
-            ownerId = savedUser.id
+            ownerId = savedUser.id,
+            syncVersion = 1L
         )
         val savedHousehold = householdRepository.save(household)
 
@@ -97,6 +100,8 @@ class AuthService(
             role = HouseholdRole.OWNER
         )
         householdMemberRepository.save(member)
+
+        productCategoryService.seedDefaultCategories(savedHousehold.id)
 
         savedUser.defaultHouseholdId = savedHousehold.id
         userRepository.save(savedUser)

@@ -29,6 +29,7 @@ import com.bitlabbr.minhadespensa.common.exception.InvalidRequestException
 import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
 import com.bitlabbr.minhadespensa.modules.auth.entity.UserEntity
 import com.bitlabbr.minhadespensa.modules.auth.repository.UserRepository
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
 import com.bitlabbr.minhadespensa.modules.household.domain.HouseholdRole
 import com.bitlabbr.minhadespensa.modules.household.dto.CreateHouseholdRequestDto
 import com.bitlabbr.minhadespensa.modules.household.dto.JoinHouseholdRequestDto
@@ -53,6 +54,7 @@ class HouseholdServiceTest {
     private val householdRepository: HouseholdRepository = mock()
     private val householdMemberRepository: HouseholdMemberRepository = mock()
     private val userRepository: UserRepository = mock()
+    private val productCategoryService: ProductCategoryService = mock()
 
     private lateinit var householdService: HouseholdService
 
@@ -61,7 +63,8 @@ class HouseholdServiceTest {
         householdService = HouseholdService(
             householdRepository = householdRepository,
             householdMemberRepository = householdMemberRepository,
-            userRepository = userRepository
+            userRepository = userRepository,
+            productCategoryService = productCategoryService
         )
     }
 
@@ -130,6 +133,7 @@ class HouseholdServiceTest {
 
         verify(householdRepository).save(any<HouseholdEntity>())
         verify(householdMemberRepository).save(any<HouseholdMemberEntity>())
+        verify(productCategoryService).seedDefaultCategories("house-1")
     }
 
     @Test
