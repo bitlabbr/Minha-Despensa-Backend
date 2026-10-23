@@ -1,7 +1,7 @@
 # Minha Despensa Backend — Arquitetura, Domínios & Operação
 
-> **Versão:** 2.0.0  
-> **Última Atualização:** 22/10/2026  
+> **Versão:** 2.1.0  
+> **Última Atualização:** 23/10/2026  
 > **Ambiente de Produção:** Domus Home Server (`https://despensa.domus.arpa`)  
 > **Repositório:** `Minha-Despensa-Backend`  
 > **Cliente Integrado:** [Minha-Dispensa (Compose Multiplatform / Room)](../Minha-Dispensa)
@@ -76,7 +76,8 @@ com.bitlabbr.minhadespensa
     ├── price/               # Histórico de Preços por Estabelecimento
     ├── budget/              # Orçamentos Mensais
     ├── sync/                # Motor de Sincronização Bidirecional v2.1 e Aliases
-    └── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
+    ├── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
+    └── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
 ```
 
 ---
@@ -197,9 +198,9 @@ O fluxo de implantação no servidor `domus` segue o roteiro padronizado de 5 et
 ./gradlew bootJar -x test
 
 # 3. Transferir o artefato para o servidor via SSH/SCP
-scp build/libs/Minha-Despensa-Backend-2.0.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
+scp build/libs/Minha-Despensa-Backend-2.1.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
 
-# 4. Reconstruir a imagem Docker e reiniciar o container
+# 4. Reconstruir a imagem Docker e reiniciar o container (volume ./releases:/app/releases mapeado)
 ssh domus-vpn "cd /home/willjsan/domus/docker/apps/despensa && docker compose up -d --build"
 
 # 5. Validação de auditoria dos logs de inicialização
@@ -211,7 +212,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **103 testes automatizados** cobrindo todos os módulos.
-- Testes unitários de serviços com simulação de regras LWW e controle de transações.
-- Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`) e códigos HTTP de resposta.
+- Suíte completa com **105 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`).
+- Testes unitários de serviços com simulação de regras LWW, leitura de manifesto OTA e controle de transações.
+- Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`), rotas abertas de download e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.

@@ -43,7 +43,7 @@ class OpenApiConfig(
 
     @Bean
     fun customOpenAPI(): OpenAPI {
-        val appVersion = buildProperties?.version ?: "2.0.0-SNAPSHOT"
+        val appVersion = buildProperties?.version ?: "2.1.0-SNAPSHOT"
         val gitCommit = buildProperties?.get("gitCommit")
         val versionDisplay = if (gitCommit != null && gitCommit != "unknown") "$appVersion ($gitCommit)" else appVersion
 

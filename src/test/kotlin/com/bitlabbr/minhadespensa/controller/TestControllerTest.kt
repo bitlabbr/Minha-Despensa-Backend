@@ -35,7 +35,7 @@ class TestControllerTest {
     @Test
     fun `hello should return build properties when available`() {
         val props = Properties().apply {
-            put("version", "2.0.0-SNAPSHOT")
+            put("version", "2.1.0-SNAPSHOT")
             put("gitCommit", "abc1234")
             put("time", Instant.now().toEpochMilli().toString())
         }
@@ -46,7 +46,7 @@ class TestControllerTest {
 
         assertEquals("UP", result["status"])
         assertEquals("Minha Despensa Backend", result["app"])
-        assertEquals("2.0.0-SNAPSHOT", result["version"])
+        assertEquals("2.1.0-SNAPSHOT", result["version"])
         assertEquals("abc1234", result["gitCommit"])
         assertNotNull(result["buildTime"])
     }
@@ -58,7 +58,7 @@ class TestControllerTest {
         val result = controller.hello()
 
         assertEquals("UP", result["status"])
-        assertEquals("2.0.0-SNAPSHOT", result["version"])
+        assertEquals("2.1.0-SNAPSHOT", result["version"])
         assertEquals("unknown", result["gitCommit"])
     }
 }
