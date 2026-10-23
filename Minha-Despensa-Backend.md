@@ -190,7 +190,7 @@ O fluxo de implantação no servidor `domus` segue o roteiro padronizado de 5 et
 ./gradlew bootJar -x test
 
 # 3. Transferir o artefato para o servidor via SSH/SCP
-scp build/libs/Minha-Despensa-Backend-0.0.1-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
+scp build/libs/Minha-Despensa-Backend-2.0.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
 
 # 4. Reconstruir a imagem Docker e reiniciar o container
 ssh domus-vpn "cd /home/willjsan/domus/docker/apps/despensa && docker compose up -d --build"
@@ -204,7 +204,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **92 testes automatizados** cobrindo todos os módulos.
+- Suíte completa com **103 testes automatizados** cobrindo todos os módulos.
 - Testes unitários de serviços com simulação de regras LWW e controle de transações.
 - Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`) e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.
