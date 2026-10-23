@@ -117,7 +117,14 @@ com.bitlabbr.minhadespensa
 | `GET` | `/api/v1/media/products/{productId}` | Download de foto com suporte a ETag / 304 Not Modified |
 | `DELETE` | `/api/v1/media/products/{productId}` | Exclui foto do produto na casa e incrementa syncVersion |
 
-### 3.5. Nota Fiscal SEFAZ (`/api/v1/invoice`) & Testes
+### 3.5. Distribuição de Atualizações do Aplicativo (`/api/v1/app`) — Aberto
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/app/version/latest` | Consulta metadados e changelog da versão mais recente (OTA) |
+| `GET` | `/api/v1/app/download/latest` | Download em stream binário do APK da versão mais recente |
+| `GET` | `/api/v1/app/download/{versionName}` | Download em stream binário do APK de versão histórica específica |
+
+### 3.6. Nota Fiscal SEFAZ (`/api/v1/invoice`) & Testes
 | Método | Endpoint | Descrição |
 | :--- | :--- | :--- |
 | `POST` | `/api/v1/invoice/parse` | Scraping de nota fiscal eletrônica via QR Code SEFAZ |
