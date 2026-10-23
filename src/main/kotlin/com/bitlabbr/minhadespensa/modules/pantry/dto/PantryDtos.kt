@@ -124,12 +124,12 @@ data class PantryOccurrenceResponseDto(
                 id = entity.id,
                 quantidade = entity.quantity,
                 precoUnitario = entity.unitPrice,
-                dataCompra = entity.purchaseDate.toIsoDateString(),
+                dataCompra = null,
                 dataValidade = entity.expirationDate.toIsoDateString(),
-                localCompra = entity.purchaseLocation,
+                localCompra = null,
                 status = entity.status,
                 batchNumber = entity.batchNumber,
-                purchaseDate = entity.purchaseDate,
+                purchaseDate = null,
                 expirationDate = entity.expirationDate,
                 updatedAt = entity.updatedAt
             )
@@ -154,45 +154,52 @@ typealias DespensaAgrupadaResponse = PantryAggregatedResponseDto
 
 @Schema(description = "Dados para criação ou atualização de um item da despensa")
 data class PantryItemRequestDto(
-    @field:Schema(description = "Identificador único do item (UUID)", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
+    @Schema(description = "Identificador único do item (UUID)", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
     val id: String? = null,
 
-    @field:Schema(description = "ID do produto associado no catálogo", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
-    @field:NotBlank(message = "O ID do produto é obrigatório")
+    @Schema(description = "ID do produto associado no catálogo", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
+    @NotBlank(message = "Product ID is required")
     @JsonAlias("produtoId", "produto_id")
     val productId: String,
 
-    @field:Schema(description = "Quantidade disponível na despensa", example = "2.0")
-    @field:PositiveOrZero(message = "A quantidade deve ser zero ou positiva")
+    @Schema(description = "Quantidade disponível na despensa", example = "2.0")
+    @PositiveOrZero(message = "Quantity must be zero or positive")
     @JsonAlias("quantidade")
     val quantity: Double = 1.0,
 
-    @field:Schema(description = "Preço unitário pago pelo item na compra", example = "5.50")
+    @Schema(description = "Preço unitário em centavos", example = "550")
+    @JsonAlias("unitPriceInCents", "unit_price_in_cents")
+    val unitPriceInCents: Long? = null,
+
+    @Schema(description = "Preço unitário pago pelo item na compra", example = "5.50")
     @JsonAlias("precoUnitario", "preco_unitario", "unit_price")
     val unitPrice: Double? = null,
 
-    @field:Schema(description = "Data de compra (timestamp em millis ou yyyy-MM-dd)", example = "2026-08-10")
+    @Schema(description = "Data de compra (timestamp em millis ou yyyy-MM-dd)", example = "2026-08-10")
     @JsonDeserialize(using = EpochMillisOrDateDeserializer::class)
     @JsonAlias("dataCompra", "data_compra", "purchase_date")
     val purchaseDate: Long? = null,
 
-    @field:Schema(description = "Data de validade do item (timestamp em millis ou yyyy-MM-dd)", example = "2026-09-20")
+    @Schema(description = "Data de validade do item (timestamp em millis ou yyyy-MM-dd)", example = "2026-09-20")
     @JsonDeserialize(using = EpochMillisOrDateDeserializer::class)
     @JsonAlias("dataValidade", "data_validade", "expiration_date")
     val expirationDate: Long? = null,
 
-    @field:Schema(description = "Local da compra (supermercado ou loja)", example = "Carrefour Hipermercado")
+    @Schema(description = "Local da compra (supermercado ou loja)", example = "Carrefour Hipermercado")
     @JsonAlias("localCompra", "local_compra", "purchase_location")
     val purchaseLocation: String? = null,
 
-    @field:Schema(description = "Status do item na despensa", example = "EM_ESTOQUE")
+    @Schema(description = "Status do item na despensa", example = "EM_ESTOQUE")
     val status: PantryItemStatus = PantryItemStatus.EM_ESTOQUE,
 
-    @field:Schema(description = "Número do lote de fabricação", example = "LOTE-2026-X")
+    @Schema(description = "Número do lote de fabricação", example = "LOTE-2026-X")
     val batchNumber: String? = null,
 
-    @field:Schema(description = "Timestamp da modificação em milissegundos UTC")
-    val updatedAt: Long? = null
+    @Schema(description = "Timestamp da modificação em milissegundos UTC")
+    val updatedAt: Long? = null,
+
+    @Schema(description = "Indica se o item foi marcado como excluído", example = "false")
+    val isDeleted: Boolean = false
 )
 
 typealias ItemDespensaRequest = PantryItemRequestDto
@@ -207,6 +214,9 @@ data class PantryItemResponseDto(
 
     @Schema(description = "Quantidade disponível na despensa", example = "2.0")
     val quantity: Double,
+
+    @Schema(description = "Preço unitário em centavos", example = "550")
+    val unitPriceInCents: Long? = null,
 
     @Schema(description = "Preço unitário pago pelo item na compra", example = "5.50")
     val unitPrice: Double? = null,
@@ -229,6 +239,9 @@ data class PantryItemResponseDto(
     @Schema(description = "Timestamp da modificação em milissegundos UTC", example = "1727280000000")
     val updatedAt: Long,
 
+    @Schema(description = "Versão monotônica de sincronização da casa", example = "42")
+    val serverVersion: Long = 0L,
+
     @Schema(description = "Indica se o item foi marcado como excluído", example = "false")
     val isDeleted: Boolean
 ) {
@@ -238,13 +251,15 @@ data class PantryItemResponseDto(
                 id = entity.id,
                 productId = entity.productId,
                 quantity = entity.quantity,
+                unitPriceInCents = entity.unitPriceInCents,
                 unitPrice = entity.unitPrice,
-                purchaseDate = entity.purchaseDate,
+                purchaseDate = null,
                 expirationDate = entity.expirationDate,
-                purchaseLocation = entity.purchaseLocation,
+                purchaseLocation = null,
                 status = entity.status,
                 batchNumber = entity.batchNumber,
                 updatedAt = entity.updatedAt,
+                serverVersion = entity.serverVersion,
                 isDeleted = entity.isDeleted
             )
     }

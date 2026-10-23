@@ -46,5 +46,8 @@ data class ApiResponse<T>(
 
         fun ok(message: String): ApiResponse<Unit> =
             ApiResponse(success = true, message = message, data = null)
+
+        fun <T> created(data: T, message: String? = null): ApiResponse<T> =
+            ApiResponse(success = true, message = message, data = data)
     }
 }

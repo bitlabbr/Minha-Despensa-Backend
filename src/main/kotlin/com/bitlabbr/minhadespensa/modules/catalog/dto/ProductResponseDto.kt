@@ -53,6 +53,9 @@ data class ProductResponseDto(
     @Schema(description = "URL da imagem miniatura", example = "https://cdn.despensa.app/p/arroz-camil.png")
     val thumbnailUrl: String?,
 
+    @Schema(description = "Hash SHA-256 da imagem", example = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    val imageHash: String?,
+
     @Schema(description = "Cadastrado manualmente", example = "true")
     val manuallyAdded: Boolean,
 
@@ -61,6 +64,9 @@ data class ProductResponseDto(
 
     @Schema(description = "Timestamp da última modificação (epoch millis UTC)", example = "1727280000000")
     val updatedAt: Long,
+
+    @Schema(description = "Versão monotônica de sincronização da casa", example = "42")
+    val serverVersion: Long = 0L,
 
     @Schema(description = "Indica se o registro está marcado como excluído", example = "false")
     val isDeleted: Boolean
@@ -76,9 +82,11 @@ data class ProductResponseDto(
                 measureUnit = entity.measureUnit,
                 netWeight = entity.netWeight,
                 thumbnailUrl = entity.thumbnailUrl,
+                imageHash = entity.imageHash,
                 manuallyAdded = entity.manuallyAdded,
                 notes = entity.notes,
                 updatedAt = entity.updatedAt,
+                serverVersion = entity.serverVersion,
                 isDeleted = entity.isDeleted
             )
     }

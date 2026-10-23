@@ -49,7 +49,7 @@ class InvoiceParseService {
         require(trimmedContent.isNotBlank()) { "O conteúdo do QR Code da nota fiscal não pode ser vazio." }
 
         val targetUrl = extractUrl(trimmedContent)
-        logger.info("Buscando dados da nota fiscal na URL: {}", targetUrl)
+        logger.info("Fetching invoice data from URL: {}", targetUrl)
 
         val htmlContent = fetchHtml(targetUrl)
         return parseHtml(htmlContent, trimmedContent)
@@ -68,8 +68,8 @@ class InvoiceParseService {
 
             response.body()
         } catch (ex: Exception) {
-            logger.error("Falha ao efetuar download da página da SEFAZ na URL {}: {}", url, ex.message)
-            throw IllegalStateException("Não foi possível acessar a página da SEFAZ: ${ex.message}", ex)
+            logger.error("Failed to download SEFAZ page from URL {}: {}", url, ex.message)
+            throw IllegalStateException("Could not access SEFAZ page: ${ex.message}", ex)
         }
     }
 
@@ -84,8 +84,8 @@ class InvoiceParseService {
         val errorElement = doc.select("erro").firstOrNull()
         if (errorElement != null && errorElement.text().isNotBlank()) {
             val errorCode = errorElement.text().trim()
-            logger.warn("SEFAZ retornou erro código '{}' ao processar nota fiscal", errorCode)
-            throw IllegalStateException("A SEFAZ retornou o código de erro $errorCode. Verifique se o QR Code é válido.")
+            logger.warn("SEFAZ returned error code '{}' while processing invoice", errorCode)
+            throw IllegalStateException("SEFAZ returned error code $errorCode. Please verify if the QR Code is valid.")
         }
 
         val accessKey = extractAccessKey(doc, qrCodeContent)
@@ -99,12 +99,12 @@ class InvoiceParseService {
         val items = consolidateItems(rawItems)
 
         if (items.isEmpty()) {
-            logger.warn("Nenhum item foi extraído da resposta da SEFAZ para chave='{}'", accessKey)
-            throw IllegalStateException("Nenhum produto foi encontrado nesta nota fiscal. Verifique se o QR Code é válido.")
+            logger.warn("No items extracted from SEFAZ response for key='{}'", accessKey)
+            throw IllegalStateException("No products found in this invoice. Please verify if the QR Code is valid.")
         }
 
         logger.info(
-            "Nota fiscal processada com sucesso: Loja='{}', Chave='{}', ItensBrutos={}, ItensAgrupados={}",
+            "Invoice processed successfully: store='{}', accessKey='{}', rawItems={}, groupedItems={}",
             storeName,
             accessKey,
             rawItems.size,
@@ -126,7 +126,7 @@ class InvoiceParseService {
         } else if (content.startsWith("http://") || content.startsWith("https://")) {
             content
         } else {
-            throw IllegalArgumentException("O conteúdo fornecido não possui uma URL válida da SEFAZ: $content")
+            throw IllegalArgumentException("Provided content does not contain a valid SEFAZ URL: $content")
         }
     }
 

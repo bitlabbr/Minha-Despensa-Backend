@@ -23,26 +23,32 @@
 
 package com.bitlabbr.minhadespensa.modules.pantry.repository
 
-import com.bitlabbr.minhadespensa.modules.pantry.domain.PantryItemStatus
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
 import com.bitlabbr.minhadespensa.modules.pantry.entity.PantryItemEntity
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 import java.util.Optional
 
 @Repository
-interface PantryItemRepository : JpaRepository<PantryItemEntity, String> {
+interface PantryItemRepository : JpaRepository<PantryItemEntity, HouseholdEntityId> {
 
-    fun findByIdAndIsDeletedFalse(id: String): Optional<PantryItemEntity>
+    fun findByHouseholdIdAndId(householdId: String, id: String): Optional<PantryItemEntity>
 
-    fun findAllByIsDeletedFalse(): List<PantryItemEntity>
+    fun findByHouseholdIdAndIdAndIsDeletedFalse(householdId: String, id: String): Optional<PantryItemEntity>
 
-    fun findAllByProductIdAndIsDeletedFalse(productId: String): List<PantryItemEntity>
+    fun findByHouseholdIdAndIsDeletedFalse(householdId: String): List<PantryItemEntity>
 
-    fun findByUpdatedAtGreaterThan(updatedAt: Long): List<PantryItemEntity>
+    fun findByHouseholdIdAndProductIdAndIsDeletedFalse(householdId: String, productId: String): List<PantryItemEntity>
 
-    fun findAllByStatusAndIsDeletedFalse(status: PantryItemStatus): List<PantryItemEntity>
+    fun findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(
+        householdId: String,
+        serverVersion: Long
+    ): List<PantryItemEntity>
 
-    fun findAllByProductIdAndStatusAndIsDeletedFalse(productId: String, status: PantryItemStatus): List<PantryItemEntity>
+    fun findByHouseholdIdAndQuantityGreaterThanAndIsDeletedFalse(
+        householdId: String,
+        quantity: Double
+    ): List<PantryItemEntity>
 }
 
 typealias ItemDespensaRepository = PantryItemRepository

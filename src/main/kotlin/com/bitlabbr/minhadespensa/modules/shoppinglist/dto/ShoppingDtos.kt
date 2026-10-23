@@ -27,32 +27,37 @@ import com.bitlabbr.minhadespensa.modules.shoppinglist.domain.ShoppingListStatus
 import com.bitlabbr.minhadespensa.modules.shoppinglist.domain.ShoppingListType
 import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingItemEntity
 import com.bitlabbr.minhadespensa.modules.shoppinglist.entity.ShoppingListEntity
+import com.fasterxml.jackson.annotation.JsonAlias
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.constraints.NotBlank
-import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.Size
 
 @Schema(description = "Dados para criação ou atualização de uma lista de compras")
 data class ShoppingListRequestDto(
-    @field:Schema(description = "ID único da lista (UUID)", example = "4fa85f64-5717-4562-b3fc-2c963f66afa7")
+    @Schema(description = "ID único da lista (UUID)", example = "4fa85f64-5717-4562-b3fc-2c963f66afa7")
     val id: String? = null,
 
-    @field:Schema(description = "Nome da lista de compras", example = "Compras do Mês")
-    @field:NotBlank(message = "O nome da lista é obrigatório")
-    @field:Size(max = 255, message = "O nome da lista não pode exceder 255 caracteres")
+    @Schema(description = "Nome da lista de compras", example = "Compras do Mês")
+    @NotBlank(message = "List name is required")
+    @Size(max = 255, message = "List name must not exceed 255 characters")
     val name: String,
 
-    @field:Schema(description = "Tipo da lista", example = "PLANNED")
+    @Schema(description = "Tipo da lista", example = "PLANNED")
+    @JsonAlias("listType")
     val type: ShoppingListType = ShoppingListType.PLANNED,
 
-    @field:Schema(description = "Status da lista", example = "DRAFT")
+    @Schema(description = "Status da lista", example = "DRAFT")
+    @JsonAlias("listStatus")
     val status: ShoppingListStatus = ShoppingListStatus.DRAFT,
 
-    @field:Schema(description = "Orçamento máximo estipulado em centavos", example = "50000")
+    @Schema(description = "Orçamento máximo estipulado em centavos", example = "50000")
     val budgetInCents: Long? = null,
 
-    @field:Schema(description = "Timestamp da última modificação (epoch millis UTC)")
-    val updatedAt: Long? = null
+    @Schema(description = "Timestamp da última modificação (epoch millis UTC)")
+    val updatedAt: Long? = null,
+
+    @Schema(description = "Indica se a lista foi marcada como excluída", example = "false")
+    val isDeleted: Boolean = false
 )
 
 @Schema(description = "Dados de uma lista de compras retornada pela API")
@@ -78,6 +83,9 @@ data class ShoppingListResponseDto(
     @Schema(description = "Timestamp da última modificação", example = "1727280000000")
     val updatedAt: Long,
 
+    @Schema(description = "Versão monotônica de sincronização da casa", example = "42")
+    val serverVersion: Long = 0L,
+
     @Schema(description = "Indica se a lista foi excluída", example = "false")
     val isDeleted: Boolean
 ) {
@@ -91,6 +99,7 @@ data class ShoppingListResponseDto(
                 budgetInCents = entity.budgetInCents,
                 items = items.map { ShoppingItemResponseDto.fromEntity(it) },
                 updatedAt = entity.updatedAt,
+                serverVersion = entity.serverVersion,
                 isDeleted = entity.isDeleted
             )
     }
@@ -98,37 +107,39 @@ data class ShoppingListResponseDto(
 
 @Schema(description = "Dados para criação ou atualização de um item da lista de compras")
 data class ShoppingItemRequestDto(
-    @field:Schema(description = "ID do item (UUID)", example = "5fa85f64-5717-4562-b3fc-2c963f66afa8")
+    @Schema(description = "ID do item (UUID)", example = "5fa85f64-5717-4562-b3fc-2c963f66afa8")
     val id: String? = null,
 
-    @field:Schema(description = "ID da lista de compras associada", example = "4fa85f64-5717-4562-b3fc-2c963f66afa7")
-    @field:NotBlank(message = "O ID da lista é obrigatório")
+    @Schema(description = "ID da lista de compras associada", example = "4fa85f64-5717-4562-b3fc-2c963f66afa7")
+    @NotBlank(message = "List ID is required")
     val listId: String,
 
-    @field:Schema(description = "ID do produto do catálogo, se houver vínculo", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
+    @Schema(description = "ID do produto do catálogo, se houver vínculo", example = "a1b2c3d4-e5f6-7890-1234-56789abcdef0")
     val productId: String? = null,
 
-    @field:Schema(description = "Texto livre caso o item não esteja no catálogo", example = "Comprar pão francês quentinho")
-    @field:Size(max = 500, message = "O texto livre não pode exceder 500 caracteres")
+    @Schema(description = "Texto livre caso o item não esteja no catálogo", example = "Comprar pão francês quentinho")
+    @Size(max = 255, message = "Raw text must not exceed 255 characters")
     val rawText: String? = null,
 
-    @field:Schema(description = "Quantidade a ser comprada", example = "2.0")
-    @field:Positive(message = "A quantidade deve ser maior que zero")
+    @Schema(description = "Quantidade", example = "2.0")
     val quantity: Double = 1.0,
 
-    @field:Schema(description = "Preço unitário no momento da compra em centavos", example = "450")
+    @Schema(description = "Preço unitário em centavos", example = "450")
     val priceAtTime: Long? = null,
 
-    @field:Schema(description = "Indica se o item já foi marcado no carrinho de compras", example = "false")
+    @Schema(description = "Marcado no carrinho", example = "false")
     val isChecked: Boolean = false,
 
-    @field:Schema(description = "Timestamp da última modificação")
-    val updatedAt: Long? = null
+    @Schema(description = "Timestamp da última modificação")
+    val updatedAt: Long? = null,
+
+    @Schema(description = "Indica se o item foi marcado como excluído", example = "false")
+    val isDeleted: Boolean = false
 )
 
-@Schema(description = "Dados de um item da lista retornado pela API")
+@Schema(description = "Dados de um item da lista de compras retornado pela API")
 data class ShoppingItemResponseDto(
-    @Schema(description = "ID do item", example = "5fa85f64-5717-4562-b3fc-2c963f66afa8")
+    @Schema(description = "ID único do item (UUID)", example = "5fa85f64-5717-4562-b3fc-2c963f66afa8")
     val id: String,
 
     @Schema(description = "ID da lista associada", example = "4fa85f64-5717-4562-b3fc-2c963f66afa7")
@@ -152,6 +163,9 @@ data class ShoppingItemResponseDto(
     @Schema(description = "Timestamp da última modificação", example = "1727280000000")
     val updatedAt: Long,
 
+    @Schema(description = "Versão monotônica de sincronização da casa", example = "42")
+    val serverVersion: Long = 0L,
+
     @Schema(description = "Indica se foi excluído", example = "false")
     val isDeleted: Boolean
 ) {
@@ -166,6 +180,7 @@ data class ShoppingItemResponseDto(
                 priceAtTime = entity.priceAtTime,
                 isChecked = entity.isChecked,
                 updatedAt = entity.updatedAt,
+                serverVersion = entity.serverVersion,
                 isDeleted = entity.isDeleted
             )
     }

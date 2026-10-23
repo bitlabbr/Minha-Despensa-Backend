@@ -23,27 +23,38 @@
 
 package com.bitlabbr.minhadespensa.common.config
 
+import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Contact
 import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.info.License
+import io.swagger.v3.oas.models.security.SecurityRequirement
+import io.swagger.v3.oas.models.security.SecurityScheme
 import io.swagger.v3.oas.models.servers.Server
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.info.BuildProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 @Configuration
-class OpenApiConfig {
+class OpenApiConfig(
+    @Autowired(required = false) private val buildProperties: BuildProperties? = null
+) {
 
     @Bean
     fun customOpenAPI(): OpenAPI {
+        val appVersion = buildProperties?.version ?: "2.0.0-SNAPSHOT"
+        val gitCommit = buildProperties?.get("gitCommit")
+        val versionDisplay = if (gitCommit != null && gitCommit != "unknown") "$appVersion ($gitCommit)" else appVersion
+
         return OpenAPI()
             .info(
                 Info()
                     .title("Minha Despensa - Backend API")
-                    .version("0.0.1")
+                    .version(versionDisplay)
                     .description(
-                        "API RESTful do backend de Minha Despensa: gestão de catálogo de produtos, despensa doméstica, " +
-                        "listas de compras e sincronização com clientes Kotlin Multiplatform (CRDT / LWW)."
+                        "API RESTful do backend de Minha Despensa: hub multi-tenant de sincronização bidirecional (v2.1), " +
+                        "gestão de casas compartilhadas (Household), catálogo de produtos, estoque e leitura de notas fiscais SEFAZ."
                     )
                     .contact(
                         Contact()
@@ -58,9 +69,20 @@ class OpenApiConfig {
             )
             .servers(
                 listOf(
-                    Server().url("http://localhost:8080").description("Servidor Local"),
-                    Server().url("http://100.98.199.97:8080").description("Domus (Tailscale)")
+                    Server().url("https://despensa.domus.arpa").description("Produção Domus (Tailscale HTTPS)"),
+                    Server().url("http://localhost:8080").description("Servidor Local de Desenvolvimento")
                 )
             )
+            .components(
+                Components().addSecuritySchemes(
+                    "bearerAuth",
+                    SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .bearerFormat("JWT")
+                        .description("Insira o token JWT de acesso emitido no login ou registro")
+                )
+            )
+            .addSecurityItem(SecurityRequirement().addList("bearerAuth"))
     }
 }

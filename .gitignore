@@ -41,3 +41,6 @@ out/
 
 # Generated documentation site
 _site/
+
+# Reports and temporary exploration documents
+reports/

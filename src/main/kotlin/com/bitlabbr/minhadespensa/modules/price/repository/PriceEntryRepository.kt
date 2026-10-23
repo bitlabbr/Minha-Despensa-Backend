@@ -23,14 +23,24 @@
 
 package com.bitlabbr.minhadespensa.modules.price.repository
 
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
 import com.bitlabbr.minhadespensa.modules.price.entity.PriceEntryEntity
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
+import java.util.Optional
 
 @Repository
-interface PriceEntryRepository : JpaRepository<PriceEntryEntity, String> {
+interface PriceEntryRepository : JpaRepository<PriceEntryEntity, HouseholdEntityId> {
 
-    fun findAllByProductIdAndIsDeletedFalseOrderByUpdatedAtDesc(productId: String): List<PriceEntryEntity>
+    fun findByHouseholdIdAndId(householdId: String, id: String): Optional<PriceEntryEntity>
 
-    fun findByUpdatedAtGreaterThan(updatedAt: Long): List<PriceEntryEntity>
+    fun findByHouseholdIdAndProductIdAndIsDeletedFalseOrderByUpdatedAtDesc(
+        householdId: String,
+        productId: String
+    ): List<PriceEntryEntity>
+
+    fun findByHouseholdIdAndServerVersionGreaterThanOrderByServerVersionAsc(
+        householdId: String,
+        serverVersion: Long
+    ): List<PriceEntryEntity>
 }

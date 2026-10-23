@@ -25,23 +25,35 @@ package com.bitlabbr.minhadespensa.controller
 
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.info.BuildProperties
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @RestController
 @RequestMapping("/api/v1/test")
 @Tag(name = "Health Check & Test", description = "Endpoints de diagnóstico e integridade do servidor")
-class TestController {
+class TestController(
+    @Autowired(required = false) private val buildProperties: BuildProperties? = null
+) {
 
-    @Operation(summary = "Verificar status da aplicação", description = "Retorna o status operacional do backend e informações do host")
+    @Operation(summary = "Verificar status da aplicação", description = "Retorna o status operacional do backend, versão semântica, git commit e build timestamp")
     @GetMapping("/hello")
     fun hello(): Map<String, Any> {
+        val version = buildProperties?.version ?: "2.0.0-SNAPSHOT"
+        val gitCommit = buildProperties?.get("gitCommit") ?: "unknown"
+        val buildTime = buildProperties?.time?.toString() ?: LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME)
+
         return mapOf(
             "status" to "UP",
             "app" to "Minha Despensa Backend",
-            "message" to "Servidor online e rodando no Domus!",
+            "version" to version,
+            "gitCommit" to gitCommit,
+            "buildTime" to buildTime,
+            "message" to "Server online and running on Domus!",
             "timestamp" to LocalDateTime.now().toString()
         )
     }

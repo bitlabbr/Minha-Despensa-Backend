@@ -23,9 +23,11 @@
 
 package com.bitlabbr.minhadespensa.modules.price.entity
 
-import com.bitlabbr.minhadespensa.common.entity.BaseSyncEntity
+import com.bitlabbr.minhadespensa.common.entity.HouseholdEntityId
+import com.bitlabbr.minhadespensa.common.entity.HouseholdScopedSyncEntity
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.IdClass
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import java.util.UUID
@@ -34,12 +36,13 @@ import java.util.UUID
 @Table(
     name = "price_entries",
     indexes = [
-        Index(name = "idx_price_product_id", columnList = "product_id"),
-        Index(name = "idx_price_updated_at", columnList = "updated_at"),
-        Index(name = "idx_price_is_deleted", columnList = "is_deleted")
+        Index(name = "idx_price_entries_product", columnList = "household_id, product_id"),
+        Index(name = "idx_price_entries_server_version", columnList = "household_id, server_version")
     ]
 )
+@IdClass(HouseholdEntityId::class)
 class PriceEntryEntity(
+    householdId: String = "",
     id: String = UUID.randomUUID().toString(),
 
     @Column(name = "product_id", nullable = false, length = 36)
@@ -48,9 +51,16 @@ class PriceEntryEntity(
     @Column(name = "price_in_cents", nullable = false)
     var priceInCents: Long = 0L,
 
-    @Column(name = "store_name", length = 150, nullable = true)
-    var storeName: String? = null,
+    @Column(name = "store_name", length = 255, nullable = false)
+    var storeName: String = "Supermercado",
 
     updatedAt: Long = System.currentTimeMillis(),
+    serverVersion: Long = 0L,
     isDeleted: Boolean = false
-) : BaseSyncEntity(id = id, updatedAt = updatedAt, isDeleted = isDeleted)
+) : HouseholdScopedSyncEntity(
+    householdId = householdId,
+    id = id,
+    updatedAt = updatedAt,
+    serverVersion = serverVersion,
+    isDeleted = isDeleted
+)
