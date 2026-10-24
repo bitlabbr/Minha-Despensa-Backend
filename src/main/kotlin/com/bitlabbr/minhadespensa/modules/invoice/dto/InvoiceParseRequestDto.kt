@@ -32,6 +32,6 @@ data class InvoiceParseRequestDto(
         description = "URL completa lida do QR Code da NFC-e (ex: SEFAZ Pernambuco)",
         example = "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=262410...|2|1|1|..."
     )
-    @field:NotBlank(message = "O conteúdo do QR Code é obrigatório")
+    @field:NotBlank(message = "QR code content is required")
     val qrCodeContent: String
 )

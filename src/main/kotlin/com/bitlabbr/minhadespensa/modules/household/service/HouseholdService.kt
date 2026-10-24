@@ -1,0 +1,307 @@
+/*
+ *   Copyright (c) 2026 Willian Santos
+ *
+ *   This work is licensed under the Creative Commons
+ *   Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+ *
+ *   You are free to:
+ *     - Share  — copy and redistribute the material in any medium or format
+ *     - Adapt  — remix, transform, and build upon the material
+ *
+ *   Under the following terms:
+ *     - Attribution    — You must give appropriate credit, provide a link to
+ *                        the license, and indicate if changes were made.
+ *     - NonCommercial  — You may not use the material for commercial purposes.
+ *
+ *   Owner rights:
+ *     - Willian Santos retains all commercial rights.
+ *    - The copyright holder may use, sell, sublicense, or relicense this
+ *       work under different terms at any time.
+ *
+ *   Full license: https://creativecommons.org/licenses/by-nc/4.0/legalcode
+ */
+
+package com.bitlabbr.minhadespensa.modules.household.service
+
+import com.bitlabbr.minhadespensa.common.exception.BusinessException
+import com.bitlabbr.minhadespensa.common.exception.ForbiddenException
+import com.bitlabbr.minhadespensa.common.exception.InvalidRequestException
+import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
+import com.bitlabbr.minhadespensa.modules.auth.repository.UserRepository
+import com.bitlabbr.minhadespensa.modules.catalog.service.ProductCategoryService
+import com.bitlabbr.minhadespensa.modules.household.domain.HouseholdRole
+import com.bitlabbr.minhadespensa.modules.household.dto.CreateHouseholdRequestDto
+import com.bitlabbr.minhadespensa.modules.household.dto.HouseholdDetailResponseDto
+import com.bitlabbr.minhadespensa.modules.household.dto.HouseholdMemberResponseDto
+import com.bitlabbr.minhadespensa.modules.household.dto.InviteCodeResponseDto
+import com.bitlabbr.minhadespensa.modules.household.dto.JoinHouseholdRequestDto
+import com.bitlabbr.minhadespensa.modules.household.dto.UpdateHouseholdRequestDto
+import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdEntity
+import com.bitlabbr.minhadespensa.modules.household.entity.HouseholdMemberEntity
+import com.bitlabbr.minhadespensa.modules.household.repository.HouseholdMemberRepository
+import com.bitlabbr.minhadespensa.modules.household.repository.HouseholdRepository
+import com.bitlabbr.minhadespensa.modules.household.security.HouseholdContext
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.security.SecureRandom
+
+@Service
+class HouseholdService(
+    private val householdRepository: HouseholdRepository,
+    private val householdMemberRepository: HouseholdMemberRepository,
+    private val userRepository: UserRepository,
+    private val productCategoryService: ProductCategoryService
+) {
+
+    private val logger = LoggerFactory.getLogger(HouseholdService::class.java)
+    private val secureRandom = SecureRandom()
+    private val crockfordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+    @Transactional(readOnly = true)
+    fun requireHouseholdAccess(userId: String, headerHouseholdId: String?): HouseholdContext {
+        if (headerHouseholdId.isNullOrBlank()) {
+            throw InvalidRequestException("Header 'X-Household-Id' is required to access this resource.")
+        }
+
+        val membership = householdMemberRepository.findByHouseholdIdAndUserId(headerHouseholdId.trim(), userId)
+            .orElseThrow {
+                ForbiddenException("Access denied: user is not a member of household '$headerHouseholdId'")
+            }
+
+        return HouseholdContext(
+            householdId = headerHouseholdId.trim(),
+            userId = userId,
+            role = membership.role
+        )
+    }
+
+    @Transactional
+    fun nextSyncVersion(householdId: String): Long {
+        val now = System.currentTimeMillis()
+        val updatedRows = householdRepository.incrementSyncVersion(householdId, now)
+        if (updatedRows == 0) {
+            throw ResourceNotFoundException("Household not found for version increment", "Household", householdId)
+        }
+
+        val household = householdRepository.findById(householdId)
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", householdId) }
+
+        return household.syncVersion
+    }
+
+    @Transactional(readOnly = true)
+    fun getUserHouseholds(userId: String): List<HouseholdDetailResponseDto> {
+        val memberships = householdMemberRepository.findByUserId(userId)
+        if (memberships.isEmpty()) return emptyList()
+
+        val householdIds = memberships.map { it.householdId }
+        val households = householdRepository.findAllById(householdIds)
+
+        return households.map { household ->
+            val members = loadMembersForHousehold(household.id)
+            mapToDetailDto(household, members)
+        }
+    }
+
+    @Transactional(readOnly = true)
+    fun getHouseholdById(householdId: String, userId: String): HouseholdDetailResponseDto {
+        val cleanHouseholdId = householdId.trim()
+        val household = householdRepository.findById(cleanHouseholdId)
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", cleanHouseholdId) }
+
+        householdMemberRepository.findByHouseholdIdAndUserId(cleanHouseholdId, userId)
+            .orElseThrow {
+                ForbiddenException("Access denied: user is not a member of household '$cleanHouseholdId'")
+            }
+
+        val members = loadMembersForHousehold(household.id)
+        return mapToDetailDto(household, members)
+    }
+
+    @Transactional
+    fun createHousehold(userId: String, dto: CreateHouseholdRequestDto): HouseholdDetailResponseDto {
+        val user = userRepository.findById(userId)
+            .orElseThrow { ResourceNotFoundException("Usuário não encontrado", "User", userId) }
+
+        val household = HouseholdEntity(
+            name = dto.name.trim(),
+            inviteCode = generateUniqueInviteCode(),
+            ownerId = user.id,
+            syncVersion = 1L
+        )
+        val savedHousehold = householdRepository.save(household)
+
+        val member = HouseholdMemberEntity(
+            householdId = savedHousehold.id,
+            userId = user.id,
+            role = HouseholdRole.OWNER
+        )
+        householdMemberRepository.save(member)
+
+        productCategoryService.seedDefaultCategories(savedHousehold.id)
+
+        if (user.defaultHouseholdId.isNullOrBlank()) {
+            user.defaultHouseholdId = savedHousehold.id
+            userRepository.save(user)
+        }
+
+        logger.info("New household created: id=${savedHousehold.id}, name='${savedHousehold.name}', ownerId=$userId")
+        val members = loadMembersForHousehold(savedHousehold.id)
+        return mapToDetailDto(savedHousehold, members)
+    }
+
+    @Transactional
+    fun updateHousehold(householdId: String, userId: String, dto: UpdateHouseholdRequestDto): HouseholdDetailResponseDto {
+        val context = requireHouseholdAccess(userId, householdId)
+        val household = householdRepository.findById(context.householdId)
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", context.householdId) }
+
+        household.name = dto.name.trim()
+        household.updatedAt = System.currentTimeMillis()
+        val updatedHousehold = householdRepository.save(household)
+
+        logger.info("Household updated: id=${updatedHousehold.id}, name='${updatedHousehold.name}'")
+        val members = loadMembersForHousehold(updatedHousehold.id)
+        return mapToDetailDto(updatedHousehold, members)
+    }
+
+    @Transactional
+    fun joinHousehold(userId: String, dto: JoinHouseholdRequestDto): HouseholdDetailResponseDto {
+        val cleanCode = dto.inviteCode.trim().uppercase()
+        val household = householdRepository.findByInviteCodeIgnoreCase(cleanCode)
+            .orElseThrow {
+                ResourceNotFoundException("No household found with invite code '$cleanCode'")
+            }
+
+        val existingMember = householdMemberRepository.findByHouseholdIdAndUserId(household.id, userId)
+        if (existingMember.isEmpty) {
+            val newMember = HouseholdMemberEntity(
+                householdId = household.id,
+                userId = userId,
+                role = HouseholdRole.MEMBER
+            )
+            householdMemberRepository.save(newMember)
+            logger.info("User $userId joined household ${household.id} via invite code $cleanCode")
+        }
+
+        // Define a casa recém-ingressada como a default do usuário
+        val user = userRepository.findById(userId).orElse(null)
+        if (user != null) {
+            user.defaultHouseholdId = household.id
+            userRepository.save(user)
+        }
+
+        val members = loadMembersForHousehold(household.id)
+        return mapToDetailDto(household, members)
+    }
+
+    @Transactional
+    fun leaveHousehold(householdId: String, userId: String) {
+        val membership = householdMemberRepository.findByHouseholdIdAndUserId(householdId, userId)
+            .orElseThrow { ResourceNotFoundException("Member not found in this household") }
+
+        if (membership.role == HouseholdRole.OWNER) {
+            val otherMembers = householdMemberRepository.findByHouseholdId(householdId).filter { it.userId != userId }
+            if (otherMembers.isNotEmpty()) {
+                throw BusinessException("The household owner cannot leave while other members exist. Transfer ownership before leaving.")
+            }
+        }
+
+        householdMemberRepository.deleteByHouseholdIdAndUserId(householdId, userId)
+        logger.info("User $userId left household $householdId")
+
+        // Se era a casa default do usuário, redefine para outra casa disponível
+        val user = userRepository.findById(userId).orElse(null)
+        if (user != null && user.defaultHouseholdId == householdId) {
+            val remainingMemberships = householdMemberRepository.findByUserId(userId)
+            user.defaultHouseholdId = remainingMemberships.firstOrNull()?.householdId
+            userRepository.save(user)
+        }
+    }
+
+    @Transactional
+    fun regenerateInviteCode(householdId: String, userId: String): InviteCodeResponseDto {
+        val context = requireHouseholdAccess(userId, householdId)
+        if (context.role != HouseholdRole.OWNER) {
+            throw ForbiddenException("Only the household owner can regenerate the invite code")
+        }
+
+        val household = householdRepository.findById(context.householdId)
+            .orElseThrow { ResourceNotFoundException("Household not found", "Household", context.householdId) }
+
+        val newCode = generateUniqueInviteCode()
+        household.inviteCode = newCode
+        household.updatedAt = System.currentTimeMillis()
+        householdRepository.save(household)
+
+        logger.info("Invite code regenerated for household ${household.id}: new code=$newCode")
+        return InviteCodeResponseDto(inviteCode = newCode)
+    }
+
+    @Transactional
+    fun removeMember(householdId: String, ownerUserId: String, targetUserId: String) {
+        val context = requireHouseholdAccess(ownerUserId, householdId)
+        if (context.role != HouseholdRole.OWNER) {
+            throw ForbiddenException("Only the household owner can remove members")
+        }
+
+        if (ownerUserId == targetUserId) {
+            throw BusinessException("The owner cannot remove themselves from the household. Use the leave option instead.")
+        }
+
+        householdMemberRepository.deleteByHouseholdIdAndUserId(householdId, targetUserId)
+        logger.info("Owner $ownerUserId removed member $targetUserId from household $householdId")
+
+        val targetUser = userRepository.findById(targetUserId).orElse(null)
+        if (targetUser != null && targetUser.defaultHouseholdId == householdId) {
+            val remainingMemberships = householdMemberRepository.findByUserId(targetUserId)
+            targetUser.defaultHouseholdId = remainingMemberships.firstOrNull()?.householdId
+            userRepository.save(targetUser)
+        }
+    }
+
+    private fun loadMembersForHousehold(householdId: String): List<HouseholdMemberResponseDto> {
+        val memberEntities = householdMemberRepository.findByHouseholdId(householdId)
+        if (memberEntities.isEmpty()) return emptyList()
+
+        val userIds = memberEntities.map { it.userId }
+        val usersMap = userRepository.findAllById(userIds).associateBy { it.id }
+
+        return memberEntities.map { member ->
+            val user = usersMap[member.userId]
+            HouseholdMemberResponseDto(
+                userId = member.userId,
+                name = user?.name ?: "Membro",
+                email = user?.email ?: "",
+                role = member.role.name,
+                joinedAt = member.joinedAt
+            )
+        }
+    }
+
+    private fun mapToDetailDto(household: HouseholdEntity, members: List<HouseholdMemberResponseDto>): HouseholdDetailResponseDto {
+        return HouseholdDetailResponseDto(
+            id = household.id,
+            name = household.name,
+            inviteCode = household.inviteCode,
+            ownerId = household.ownerId,
+            syncVersion = household.syncVersion,
+            members = members,
+            createdAt = household.createdAt,
+            updatedAt = household.updatedAt
+        )
+    }
+
+    private fun generateUniqueInviteCode(): String {
+        var code: String
+        do {
+            val sb = StringBuilder("CASA-")
+            for (i in 0 until 8) {
+                sb.append(crockfordAlphabet[secureRandom.nextInt(crockfordAlphabet.length)])
+            }
+            code = sb.toString()
+        } while (householdRepository.existsByInviteCodeIgnoreCase(code))
+        return code
+    }
+}

@@ -36,7 +36,7 @@ Contributors must adhere to the core architectural guidelines outlined in [`Minh
    - Keep business logic encapsulated within its vertical module under `modules/<domain>`.
    - Cross-cutting concerns belong strictly to `common/`.
 2. **Local-First & CRDT Last-Write-Wins (LWW):**
-   - Synchronizable entities must inherit from `BaseSyncEntity` (`id: UUID`, `updatedAt: Long`, `isDeleted: Boolean`).
+   - Synchronizable entities must inherit from `HouseholdScopedSyncEntity` (`householdId: String`, `id: String`, `updatedAt: Long`, `serverVersion: Long`, `isDeleted: Boolean`).
    - Soft-delete is mandatory: never execute physical SQL deletes for synchronizable records.
 3. **Jackson 3 Deserialization Conventions:**
    - Do **NOT** use `@field:JsonAlias` or `@field:JsonProperty` on primary constructor properties of Kotlin data classes.

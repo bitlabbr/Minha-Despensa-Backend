@@ -66,7 +66,15 @@ class RequestLoggingFilter : OncePerRequestFilter() {
             val duration = System.currentTimeMillis() - startTime
             val status = response.status
 
-            val logMessage = "[HTTP] $method $uri$query - Status: $status (${duration}ms) - Client: $clientIp"
+            val authHeader = request.getHeader("Authorization")
+            val authTag = when {
+                authHeader == null -> "no-token"
+                authHeader.startsWith("Bearer ") -> "bearer"
+                else -> "non-bearer"
+            }
+            val houseTag = request.getHeader("X-Household-Id")?.let { "house=$it" } ?: "no-house"
+
+            val logMessage = "[HTTP] $method $uri$query [$authTag, $houseTag] - Status: $status (${duration}ms) - Client: $clientIp"
 
             when {
                 status >= 500 -> accessLogger.error(logMessage)

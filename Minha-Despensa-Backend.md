@@ -1,7 +1,7 @@
 # Minha Despensa Backend — Arquitetura, Domínios & Operação
 
-> **Versão:** 1.0.0  
-> **Última Atualização:** 18/10/2026  
+> **Versão:** 2.1.0  
+> **Última Atualização:** 23/10/2026  
 > **Ambiente de Produção:** Domus Home Server (`https://despensa.domus.arpa`)  
 > **Repositório:** `Minha-Despensa-Backend`  
 > **Cliente Integrado:** [Minha-Dispensa (Compose Multiplatform / Room)](../Minha-Dispensa)
@@ -10,14 +10,14 @@
 
 ## 1. 🎯 Identidade & Papel Arquitetural do Servidor
 
-O **Minha Despensa Backend** é o servidor dedicado, hub central de dados e orquestrador de serviços do ecossistema **Minha Despensa**. Ele foi concebido para atuar em sinergia estrita com o paradigma **Local-First / Offline-First** do aplicativo cliente móvel (Android & iOS via Compose Multiplatform):
+O **Minha Despensa Backend** é o servidor dedicado, hub central de sincronização multi-tenant e orquestrador de serviços do ecossistema **Minha Despensa**. Ele atua em sinergia estrita com o paradigma **Local-First / Offline-First** do aplicativo cliente móvel (Android & iOS via Compose Multiplatform):
 
 ```mermaid
 flowchart TD
     subgraph Client["Dispositivos Móveis (KMP)"]
         UI["Compose Multiplatform UI"]
         Room["Room SQLite (Local-First)"]
-        SyncWorker["SyncEngine (Background Worker)"]
+        SyncWorker["SyncCoordinator (Single-Flight Mutex)"]
         UI <--> Room
         Room <--> SyncWorker
     end
@@ -26,28 +26,33 @@ flowchart TD
         Traefik["Traefik v3.0 (Reverse Proxy)<br/>https://despensa.domus.arpa"]
     end
 
-    subgraph Backend["Minha Despensa Backend (Spring Boot 4)"]
+    subgraph Backend["Minha Despensa Backend (Spring Boot 4 / Kotlin)"]
+        Security["OAuth2 Resource Server (JWT HMAC-SHA256)"]
         API["Controllers REST (/api/v1/*)"]
-        Engine["CRDT LWW Sync Engine"]
+        Engine["Motor de Sincronização v2.1<br/>(Lock Pessimista + syncVersion + LWW)"]
+        Dedupe["Deduplicação Híbrida (UUIDv5 + Aliases)"]
         Scraper["NFC-e SEFAZ Scraper (Jsoup)"]
-        Services["Serviços de Domínio"]
-        API --> Engine & Scraper & Services
+        Security --> API
+        API --> Engine & Dedupe & Scraper
     end
 
     subgraph Storage["Armazenamento Autoritativo"]
-        Postgres[("PostgreSQL 15 (Container)")]
-        Services & Engine --> Postgres
+        Postgres[("PostgreSQL 15 (Container)<br/>Flyway V1 Multi-Tenant Schema")]
+        Engine & Dedupe --> Postgres
     end
 
-    SyncWorker -- "Push / Pull Delta" --> Traefik
-    Traefik --> API
+    SyncWorker -- "Push / Pull Delta (X-Household-Id)" --> Traefik
+    Traefik --> Security
 ```
 
 ### Princípios Norteadores
-1. **Local-First Enabler:** O cliente móvel nunca é bloqueado por latência de rede. O backend fornece endpoints otimizados para sincronismo em lote (*bulk sync*) com deltas baseados em timestamps UTC.
-2. **Modular Monolith:** A estrutura do projeto é segmentada por domínios de negócio verticais com alto acoplamento interno e baixo acoplamento entre módulos.
-3. **Consistência Eventual via LWW (Last-Write-Wins):** Resolução de conflitos determinística baseada no carimbo de data/hora mais recente de modificação.
-4. **Higiene de Dados & Soft Delete:** Entidades sincronizáveis nunca sofrem deleção física instantânea; registros marcados com `isDeleted = true` propagam o evento de exclusão para todos os dispositivos pareados.
+1. **Multi-Tenant Scoped by Household:** Nenhum dado vaza entre casas. Toda entidade de negócio syncable herda de `HouseholdScopedSyncEntity` com chave primária composta `(household_id, id)`.
+2. **Local-First Enabler:** O cliente móvel nunca é bloqueado por latência de rede. O backend fornece sincronização bidirecional em lote (*bulk sync*) em ordem topológica estrita com deltas paginados por `serverVersion`.
+3. **Serialização Monotônica (`syncVersion`):** Evita condições de corrida em `updatedAt`. Cada Push adquire um lock pessimista na linha da casa (`households`), incrementa o `syncVersion` monotonicamente e carimba todos os registros do lote com a versão gerada.
+4. **Deduplicação Híbrida & Aliases Duráveis (`entity_id_aliases`):** Produtos cadastrados offline em dispositivos diferentes com o mesmo EAN ou mesmo par `(normalizedName, measureUnit)` convergem automaticamente para o registro canônico mais antigo. O backend registra o remapeamento na tabela durável `entity_id_aliases` e retorna `productIdMappings` para que o cliente ajuste suas chaves estrangeiras locais.
+5. **Cascade Tombstones ("Tombstone do pai vence o filho"):** Ao excluir uma lista de compras (`isDeleted = true`), todos os seus itens tornam-se automaticamente excluídos no servidor. Itens sincronizados cujas listas pai já faleceram são forçados para `isDeleted = true`.
+6. **Autenticação Segura JWT com Rotação de Refresh Token:** Tokens de acesso HMAC-SHA256 de curta duração (1h) e tokens de atualização persistidos apenas em forma de hash SHA-256 com detecção de reuso e revogação de família.
+7. **Códigos de Convite Amigáveis (Crockford Base32):** Ingressar em uma despensa compartilhada utiliza códigos no formato `CASA-XXXXXXXX` gerados a partir do alfabeto Base32 de Crockford (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`), excluindo caracteres ambíguos (`0/O/1/I`) e insensíveis a maiúsculas/minúsculas.
 
 ---
 
@@ -58,34 +63,113 @@ com.bitlabbr.minhadespensa
 ├── common/                  # Infraestrutura transversal e utilitários
 │   ├── config/              # OpenApiConfig (Swagger UI) e WebConfig (CORS)
 │   ├── dto/                 # ApiResponse<T> e ErrorResponse padronizados
-│   ├── entity/              # BaseSyncEntity (id, updatedAt, isDeleted)
-│   └── exception/           # Hierarquia de exceções de domínio e GlobalExceptionHandler
+│   ├── entity/              # HouseholdEntityId e HouseholdScopedSyncEntity
+│   ├── exception/           # Hierarquia de exceções e GlobalExceptionHandler
+│   └── util/                # DeterministicIdUtils (Normalizador e RFC 4122 UUIDv5)
 ├── controller/              # Endpoints de diagnóstico (TestController)
 └── modules/                 # Módulos verticais de negócio
-    ├── catalog/             # Catálogo mestre de produtos (Entity, DTOs, Repository, Service, Controller)
-    ├── pantry/              # Estoque doméstico, agregação e controle de validade
-    ├── shoppinglist/        # Listas de compras (PLANNED, SCRATCHPAD) com soft-delete em cascata
-    ├── price/               # Histórico de preços por produto e estabelecimento
-    ├── sync/                # Motor de replicação bidirecional CRDT LWW
-    └── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
+    ├── auth/                # Autenticação JWT, Registro, Rotação e Revogação
+    ├── household/           # Gestão de Casas, Convites Crockford e Controle de Membros
+    ├── catalog/             # Catálogo de Produtos, Categorias e Mídia (Fotos WebP)
+    ├── pantry/              # Itens de Despensa (Estoque) e Movimentações (Livro-Razão)
+    ├── shoppinglist/        # Listas e Itens de Compras com Cascade Tombstone
+    ├── price/               # Histórico de Preços por Estabelecimento
+    ├── budget/              # Orçamentos Mensais
+    ├── sync/                # Motor de Sincronização Bidirecional v2.1 e Aliases
+    ├── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
+    └── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
 ```
-
-### Responsabilidades por Módulo
-
-| Módulo | Escopo & Responsabilidade | Entidades Principais |
-| :--- | :--- | :--- |
-| **`catalog`** | Gestão do catálogo mestre de produtos mercado (EAN, nome, categoria, marca, unidade de medida). Não possui estado de estoque. | `ProductEntity` |
-| **`pantry`** | Gestão das instâncias físicas de produtos na despensa da casa, organizadas por lotes de compra, validade e controle de consumo. | `PantryItemEntity` |
-| **`shoppinglist`**| Listas de compras dinâmicas ou planejadas, itens pendentes/adquiridos, com regras de cascade soft-delete em itens órfãos. | `ShoppingListEntity`, `ShoppingItemEntity` |
-| **`price`** | Histórico financeiro de preços pagos por unidade, data e local de compra para alimentar comparativos de mercado. | `PriceEntryEntity` |
-| **`sync`** | Motor de reconciliação em lote: recebe push de alterações locais e fornece deltas incrementais no pull com `serverTimestamp`. | N/A (orquestra os repositórios dos domínios) |
-| **`invoice`** | Scraping, parsing e agrupamento automático de produtos duplicados de notas fiscais eletrônicas de consumidor (NFC-e SEFAZ PE) para auto-preenchimento do app. | DTOs de extração |
 
 ---
 
-## 3. 🌐 Topologia de Infraestrutura & Servidor (Domus)
+## 3. 📋 Matriz de Endpoints da API REST (v1)
 
-A aplicação é implantada no servidor doméstico dedicado `domus` via Docker e protegida por rede privada Tailscale e proxy reverso Traefik com TLS automatizado:
+### 3.1. Autenticação (`/api/v1/auth`)
+| Método | Endpoint | Autenticação | Descrição |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Aberto | Cria usuário, senha com hash BCrypt, casa pessoal inicial e inicializa 9 categorias padrão |
+| `POST` | `/api/v1/auth/login` | Aberto | Autentica e emite par de tokens (Access JWT + Refresh Token) |
+| `POST` | `/api/v1/auth/refresh` | Aberto | Rotação de refresh token com detecção de reuso |
+| `POST` | `/api/v1/auth/logout` | Requer Bearer Auth | Revoga o refresh token ativo do dispositivo |
+| `GET` | `/api/v1/auth/me` | Requer Bearer Auth | Retorna o perfil do usuário autenticado |
+
+### 3.2. Casas Compartilhadas (`/api/v1/households`) — Requer Bearer Auth
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/households` | Lista todas as casas em que o usuário autenticado é membro |
+| `GET` | `/api/v1/households/{id}` | Retorna os detalhes e integrantes de uma casa específica |
+| `POST` | `/api/v1/households` | Cria uma nova casa, define o usuário como `OWNER` e inicializa 9 categorias padrão |
+| `PUT` | `/api/v1/households/{id}` | Renomeia uma casa (requer privilégio de membro) |
+| `POST` | `/api/v1/households/join` | Ingressa em uma casa via código de convite `CASA-XXXXXXXX` |
+| `POST`, `DELETE` | `/api/v1/households/{id}/leave` | Sai de uma casa compartilhada |
+| `POST` | `/api/v1/households/{id}/invite-code/regenerate`, `/{id}/regenerate-invite-code` | Regenera o código de convite (apenas `OWNER`) |
+| `DELETE` | `/api/v1/households/{id}/members/{userId}` | Remove um membro da casa (apenas `OWNER`) |
+
+### 3.3. Sincronização Bidirecional v2.1 (`/api/v1/sync`) — Requer Bearer Auth + `X-Household-Id`
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/sync/push` | Envia lote das 8 coleções, incrementa `syncVersion` e resolve aliases |
+| `GET` | `/api/v1/sync/pull` | Baixa deltas de todas as 8 entidades com `serverVersion > sinceVersion` |
+
+### 3.4. Mídia de Produtos (`/api/v1/media/products`) — Requer Bearer Auth + `X-Household-Id`
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `PUT` | `/api/v1/media/products/{productId}` | Upload de foto (WebP/JPEG até 200KB) com hash SHA-256 |
+| `GET` | `/api/v1/media/products/{productId}` | Download de foto com suporte a ETag / 304 Not Modified |
+| `DELETE` | `/api/v1/media/products/{productId}` | Exclui foto do produto na casa e incrementa syncVersion |
+
+### 3.5. Distribuição de Atualizações do Aplicativo (`/api/v1/app`) — Aberto
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/app/version/latest` | Consulta metadados e changelog da versão mais recente (OTA) |
+| `GET` | `/api/v1/app/download/latest` | Download em stream binário do APK da versão mais recente |
+| `GET` | `/api/v1/app/download/{versionName}` | Download em stream binário do APK de versão histórica específica |
+
+### 3.6. Nota Fiscal SEFAZ (`/api/v1/invoice`) & Testes
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/invoice/parse` | Scraping de nota fiscal eletrônica via QR Code SEFAZ |
+| `GET` | `/api/v1/test/hello` | Health check básico de conectividade |
+
+---
+
+## 4. 🔄 Topologia do Motor de Sincronização Bidirecional v2.1
+
+A sincronização entre o aplicativo KMP e o servidor processa rigorosamente a ordem topológica das 8 coleções para garantir integridade referencial:
+
+```mermaid
+flowchart TD
+    subgraph OrdemTopologica["Ordem de Processamento no Push & Pull"]
+        C1["1. Categorias (product_categories)"] --> C2["2. Produtos (catalog_products)"]
+        C2 --> C3["3. Listas de Compras (shopping_lists)"]
+        C3 --> C4["4. Itens das Listas (shopping_items)"]
+        C2 --> C4
+        C2 --> C5["5. Itens da Despensa / Estoque (pantry_items)"]
+        C2 --> C6["6. Registros de Preços (price_entries)"]
+        C2 & C5 --> C7["7. Movimentações de Estoque (pantry_movements)"]
+        C8["8. Orçamentos Mensais (monthly_budgets)"]
+    end
+```
+
+### 4.1. Algoritmo de Deduplicação Híbrida de Produtos & Categorias
+Quando um dispositivo envia um produto no Push:
+1. O backend busca por chave primária `(household_id, targetId)`.
+2. Se `ean != null`: busca por chave natural `findByHouseholdIdAndEan(householdId, cleanEan)`.
+3. Se `ean == null`: busca por chave natural `findByHouseholdIdAndNormalizedNameAndMeasureUnitAndEanIsNull(householdId, normalizedName, measureUnit)`.
+4. Se encontrar um produto canônico existente com outro ID:
+   - Salva o vínculo durável na tabela `entity_id_aliases (household_id, entity_type='PRODUCT', alias_id, canonical_id)`.
+   - Se existia uma linha sob `targetId`, marca como excluída (`isDeleted = true, ean = null`), e desambigua o nome normalizado (`normalizedName = "${normalizedName}#deleted#${id}"`) para que nunca colida em `ux_products_household_name_unit`.
+   - Caso o produto obsoleto possua foto e o canônico ainda não, migra a mídia para o canônico.
+   - Aplica a regra LWW no produto canônico.
+   - Retorna `productIdMappings[targetId] = canonical.id` (preservando o ID original enviado mesmo em retentativas).
+5. Durante o processamento subsequente de `shopping_items`, `pantry_items`, `price_entries` e `pantry_movements`, as chaves estrangeiras `productId` são reescritas em memória utilizando o mapa de remapeamento e a tabela `entity_id_aliases`.
+6. **Categorias (`product_categories`):** Processadas analogamente em `ProductCategoryService.upsertForSync`. A busca por `normalizedName` precede o ID; caso colida, registra o alias, desambigua o nome da obsoleta (`#deleted#id`) e retorna `categoryIdMappings`.
+7. **Integridade de Listas de Compras:** Itens de lista (`shopping_items`) sem a respectiva lista pai ou com `productId` inexistente na casa são rejeitados de forma graciosa em `SyncRejectedItemDto`, sem interromper o lote e evitando falhas de chave estrangeira no SQLite móvel.
+8. **Migration Flyway:** Os índices parciais únicos em `V1__init_multi_tenant_schema.sql` contêm `WHERE is_deleted = FALSE`, garantindo que produtos e categorias soft-deleted nunca bloqueiem novos cadastros com o mesmo EAN ou nome.
+
+---
+
+## 5. 🌐 Topologia de Infraestrutura & Servidor (Domus)
 
 ```mermaid
 flowchart LR
@@ -94,150 +178,41 @@ flowchart LR
     DespensaApp -- "traefik_proxy network" --> Postgres["Container: postgres<br/>(PostgreSQL 15 :5432)"]
 ```
 
-### Detalhes Técnicos do Ambiente
 - **Host SSH:** `domus-vpn` (`100.98.199.97`, usuário `willjsan`)
 - **DNS / Domínio:** `https://despensa.domus.arpa`
-- **Proxy Reverso:** Traefik v3.0 com configuração dinâmica em `~/domus/docker/misc/certs.yaml`:
-  - Roteador: `despensa-router` escutando em `websecure` (HTTPS :443)
-  - Serviço: `http://despensa_api:8080`
-  - Redirecionamento automático de HTTP (:80) para HTTPS (:443)
-  - Certificado Wildcard TLS: `/etc/traefik/certs/_wildcard.domus.arpa+3.pem`
-- **Banco de Dados:** PostgreSQL 15 rodando no container `postgres` na rede `traefik_proxy`:
-  - JDBC URL: `jdbc:postgresql://postgres:5432/despensa`
-  - Usuário: `despensa_user`
-- **Container da Aplicação:** `despensa_api`:
-  - Imagem base: `eclipse-temurin:17-jre`
-  - Diretório de deploy: `/home/willjsan/domus/docker/apps/despensa/`
-  - Limite de memória: `512m`
-  - Restart policy: `unless-stopped`
+- **Proxy Reverso:** Traefik v3.0 escutando em `websecure` (:443) com roteamento para `http://despensa_api:8080`.
+- **Banco de Dados:** PostgreSQL 15 (`despensa_user` / `despensa`).
+- **Migrações:** Flyway (`db/migration/V1__init_multi_tenant_schema.sql`).
 
 ---
 
-## 4. 📐 Diretrizes de Arquitetura & Padrões de Código
+## 6. 🚢 Runbook Oficial de Build & Deploy no Servidor Domus
 
-### 4.1. BaseSyncEntity & Last-Write-Wins (LWW)
-Todas as entidades sincronizáveis herdam obrigatoriamente de `BaseSyncEntity`:
-```kotlin
-@MappedSuperclass
-abstract class BaseSyncEntity(
-    @Id
-    @Column(nullable = false, length = 36)
-    open var id: String = UUID.randomUUID().toString(),
-
-    @Column(nullable = false)
-    open var updatedAt: Long = System.currentTimeMillis(),
-
-    @Column(nullable = false)
-    open var isDeleted: Boolean = false
-)
-```
-**Regras de Persistência no Service:**
-- **Atualização LWW:** Ao receber um payload com `updatedAt`, comparar com a entidade do banco. Se `payload.updatedAt < existing.updatedAt`, a alteração recebida é descartada (o estado do servidor é mais recente).
-- **Soft Delete:** Nunca realizar `repository.delete()`. Alterar `isDeleted = true`, atualizar `updatedAt = max(payload.updatedAt, System.currentTimeMillis())` e salvar.
-
-### 4.2. Desserialização Jackson 3 em Kotlin Data Classes
-Spring Boot 4.x utiliza Jackson 3 (`tools.jackson`). Em Kotlin data classes com construtor primário:
-- **NUNCA usar o target `@field:` em `@JsonAlias` ou `@JsonProperty`**:
-  ```kotlin
-  // ❌ INCORRETO (o deserializador creator de construtor do Jackson ignora aliases no field):
-  @field:JsonAlias("codigoBarras") val ean: String? = null
-
-  // ✅ CORRETO (anota o parâmetro/propriedade do construtor primário):
-  @JsonAlias("codigoBarras") val ean: String? = null
-  ```
-
-### 4.3. Tratamento Centralizado de Exceções
-Todas as exceções são capturadas pelo [`GlobalExceptionHandler`](file:///Users/willian/Projetos/Minha-Despensa-Backend/Minha-Despensa-Backend/src/main/kotlin/com/bitlabbr/minhadespensa/common/exception/GlobalExceptionHandler.kt):
-- `ResourceNotFoundException` ➔ `404 Not Found` (logado em `WARN`)
-- `ConflictException` ➔ `409 Conflict` (logado em `WARN`)
-- `InvalidRequestException` ou `IllegalArgumentException` ➔ `400 Bad Request` (logado em `WARN`)
-- `BusinessException` ➔ `422 Unprocessable Entity` (logado em `WARN`)
-- `MethodArgumentNotValidException` ➔ `400 Bad Request` com array `fieldErrors` (logado em `WARN`)
-- `Exception` genérica ➔ `500 Internal Server Error` (logado em `ERROR` com stack trace)
-
-### 4.4. Observabilidade & Estratégia de Logs
-O backend possui um pipeline unificado de logs para auditoria de tráfego móvel e solução rápida de problemas:
-- **`RequestLoggingFilter`:** Filtro servlet de alta prioridade que audita todas as requisições sob `/api/**`:
-  `[HTTP] {MÉTODO} {URI}{QUERY} - Status: {STATUS} ({DURAÇÃO}ms) - Client: {IP_TAILSCALE}`
-- **Formatação Estruturada:** Console configurado com timestamp UTC/ISO, thread, destaque de cores e logger da classe em `application.properties`.
-- **Inspeção Remota:** Durante o deploy e testes, os logs do container `despensa_api` devem ser inspecionados para validar o ciclo de vida e a chegada das requisições móveis:
-  ```bash
-  ssh domus-vpn "docker logs -f --tail 30 despensa_api"
-  ```
-
-### 4.5. Cabeçalho de Licença e Autoria Obrigatório (CC BY-NC 4.0)
-Todos os arquivos de código-fonte (`.kt`), em `src/main` e `src/test`, devem conter o cabeçalho padronizado da licença CC BY-NC 4.0:
-
-```kotlin
-/*
- *   Copyright (c) 2026 Willian Santos
- *
- *   This work is licensed under the Creative Commons
- *   Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
- *
- *   You are free to:
- *     - Share  — copy and redistribute the material in any medium or format
- *     - Adapt  — remix, transform, and build upon the material
- *
- *   Under the following terms:
- *     - Attribution    — You must give appropriate credit, provide a link to
- *                        the license, and indicate if changes were made.
- *     - NonCommercial  — You may not use the material for commercial purposes.
- *
- *   Owner rights:
- *     - Willian Santos retains all commercial rights.
- *    - The copyright holder may use, sell, sublicense, or relicense this
- *       work under different terms at any time.
- *
- *   Full license: https://creativecommons.org/licenses/by-nc/4.0/legalcode
- */
-```
-
-### 4.6. Governança, Licenciamento & Automação CI/CD Obrigatórios
-O repositório do backend adota formalmente os padrões de engenharia de software e governança do ecossistema:
-- **`LICENSE`:** Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0), resguardando todos os direitos comerciais para Willian Santos.
-- **`CONTRIBUTING.md`:** Normas para colaboradores, incluindo Contributor License Agreement (CLA), arquitetura de módulos, exigência de 100% de testes verdes e fluxo de PRs.
-- **`.github/workflows/ci.yml`:** Pipeline de Integração Contínua acionado em pushes e PRs para `main`, `dev` e `epic/**`. Executa compilação, testes unitários, empacotamento do fat JAR e validação da imagem Docker.
-- **`.github/workflows/pages.yml`:** Pipeline de Entrega Contínua de documentação estática para o GitHub Pages com suporte a diagramas Mermaid.js e renderização do guia arquitetural.
-
----
-
-## 5. 🚢 Runbook Oficial de Build & Deploy
-
-O fluxo de implantação no servidor `domus` segue um roteiro estrito de 5 etapas automatizadas:
-
-```mermaid
-flowchart TD
-    A["1. Executar Testes Unitários<br/>(./gradlew test ➔ 100% verde)"] --> B["2. Gerar Fat JAR Executável<br/>(./gradlew bootJar -x test)"]
-    B --> C["3. Transferir Artefato via SCP<br/>(scp build/libs/*.jar domus-vpn:~/domus/docker/apps/despensa/app.jar)"]
-    C --> D["4. Recriar Container Docker<br/>(ssh domus-vpn 'cd ~/domus/docker/apps/despensa && docker compose up -d --build')"]
-    D --> E["5. Smoke Test & Health Check<br/>(curl -s https://despensa.domus.arpa/api/v1/test/hello)"]
-```
-
-### Comandos de Terminal
+O fluxo de implantação no servidor `domus` segue o roteiro padronizado de 5 etapas:
 
 ```bash
-# Passo 1: Garantir que 100% dos testes passam localmente
+# 1. Garantir que 100% dos testes passam localmente (tolerância zero a falhas)
 ./gradlew test
 
-# Passo 2: Empacotar a aplicação Spring Boot
+# 2. Empacotar o Fat JAR otimizado
 ./gradlew bootJar -x test
 
-# Passo 3: Enviar o JAR para o host remoto Domus
-scp build/libs/Minha-Despensa-Backend-0.0.1-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
+# 3. Transferir o artefato para o servidor via SSH/SCP
+scp build/libs/Minha-Despensa-Backend-2.1.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
 
-# Passo 4: Recompilar a imagem Docker e reiniciar o container
+# 4. Reconstruir a imagem Docker e reiniciar o container (volume ./releases:/app/releases mapeado)
 ssh domus-vpn "cd /home/willjsan/domus/docker/apps/despensa && docker compose up -d --build"
 
-# Passo 5: Validar a saúde do serviço via HTTPS e Traefik
-curl -s https://despensa.domus.arpa/api/v1/test/hello
+# 5. Validação de auditoria dos logs de inicialização
+ssh domus-vpn "docker logs --tail 30 despensa_api"
 ```
 
 ---
 
-## 6. 🧪 Política de Testes Automatizados
+## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Toda regra de negócio (Services) possui teste unitário com mocks via `mockito-kotlin`.
-- Todo endpoint (Controllers) possui teste de contrato WebMvc com `MockMvc` validando códigos HTTP (200, 201, 400, 404, 409) e envelopes JSON.
-- Nenhuma alteração é implantada em produção se houver falhas na suíte de testes.
+- Suíte completa com **105 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`).
+- Testes unitários de serviços com simulação de regras LWW, leitura de manifesto OTA e controle de transações.
+- Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`), rotas abertas de download e códigos HTTP de resposta.
+- Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.
