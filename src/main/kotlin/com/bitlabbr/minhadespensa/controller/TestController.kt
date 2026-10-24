@@ -43,7 +43,7 @@ class TestController(
     @Operation(summary = "Verificar status da aplicação", description = "Retorna o status operacional do backend, versão semântica, git commit e build timestamp")
     @GetMapping("/hello")
     fun hello(): Map<String, Any> {
-        val version = buildProperties?.version ?: "2.0.0-SNAPSHOT"
+        val version = buildProperties?.version ?: "2.1.0-SNAPSHOT"
         val gitCommit = buildProperties?.get("gitCommit") ?: "unknown"
         val buildTime = buildProperties?.time?.toString() ?: LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME)
 
