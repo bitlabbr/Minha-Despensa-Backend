@@ -43,6 +43,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -162,6 +163,70 @@ class BugReportControllerTest {
     fun `GET listReports unauthenticated should return 401 Unauthorized`() {
         mockMvc.perform(get("/api/v1/support/bug-reports"))
             .andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `GET getReportByProtocol authenticated should return 200 OK with report details`() {
+        val summary = BugReportSummaryDto(
+            id = "550e8400-e29b-41d4-a716-446655440003",
+            protocol = "BUG-20261024-0002",
+            category = "CRASH",
+            title = "Crash ao iniciar",
+            description = "Falha no boot",
+            appVersion = "2.1.0",
+            deviceModel = "Galaxy S24",
+            osVersion = "Android 14",
+            userId = "user-2",
+            householdId = "house-2",
+            userContact = "user2@test.com",
+            hasLogs = true,
+            status = "OPEN",
+            createdAt = 1729795200000L
+        )
+
+        whenever(bugReportService.getReportSummary("BUG-20261024-0002")).thenReturn(summary)
+
+        mockMvc.perform(
+            get("/api/v1/support/bug-reports/BUG-20261024-0002")
+                .with(jwt().jwt { it.subject("admin-user") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.protocol").value("BUG-20261024-0002"))
+            .andExpect(jsonPath("$.data.category").value("CRASH"))
+            .andExpect(jsonPath("$.data.title").value("Crash ao iniciar"))
+    }
+
+    @Test
+    fun `PATCH updateReportStatus authenticated should return 200 OK with updated report`() {
+        val updatedSummary = BugReportSummaryDto(
+            id = "550e8400-e29b-41d4-a716-446655440003",
+            protocol = "BUG-20261024-0002",
+            category = "CRASH",
+            title = "Crash ao iniciar",
+            description = "Falha no boot",
+            appVersion = "2.1.0",
+            deviceModel = "Galaxy S24",
+            osVersion = "Android 14",
+            userId = "user-2",
+            householdId = "house-2",
+            userContact = "user2@test.com",
+            hasLogs = true,
+            status = "RESOLVED",
+            createdAt = 1729795200000L
+        )
+
+        whenever(bugReportService.updateReportStatus("BUG-20261024-0002", "RESOLVED")).thenReturn(updatedSummary)
+
+        mockMvc.perform(
+            patch("/api/v1/support/bug-reports/BUG-20261024-0002/status")
+                .param("status", "RESOLVED")
+                .with(jwt().jwt { it.subject("admin-user") })
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.protocol").value("BUG-20261024-0002"))
+            .andExpect(jsonPath("$.data.status").value("RESOLVED"))
     }
 
     @Test

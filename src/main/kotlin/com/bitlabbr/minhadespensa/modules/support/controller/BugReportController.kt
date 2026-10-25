@@ -41,6 +41,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestHeader
@@ -124,6 +125,49 @@ class BugReportController(
     ): ApiResponse<List<BugReportSummaryDto>> {
         val reports = bugReportService.listReports(status, category)
         return ApiResponse.ok(reports)
+    }
+
+    @Operation(
+        summary = "Consultar detalhes de um chamado de suporte",
+        description = "Retorna os detalhes completos do chamado pelo seu protocolo único."
+    )
+    @ApiResponses(
+        value = [
+            SwaggerResponse(responseCode = "200", description = "Detalhes do chamado retornados com sucesso"),
+            SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT"),
+            SwaggerResponse(responseCode = "404", description = "Protocolo não encontrado")
+        ]
+    )
+    @GetMapping("/bug-reports/{protocol}")
+    fun getReportByProtocol(
+        @Parameter(description = "Protocolo único do chamado (ex: BUG-20261024-8F2A)")
+        @PathVariable protocol: String
+    ): ApiResponse<BugReportSummaryDto> {
+        val summary = bugReportService.getReportSummary(protocol)
+        return ApiResponse.ok(summary)
+    }
+
+    @Operation(
+        summary = "Atualizar status de um chamado de suporte",
+        description = "Permite alterar o status de triagem do chamado (OPEN, INVESTIGATING, RESOLVED, CLOSED)."
+    )
+    @ApiResponses(
+        value = [
+            SwaggerResponse(responseCode = "200", description = "Status atualizado com sucesso"),
+            SwaggerResponse(responseCode = "400", description = "Status informado inválido"),
+            SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT"),
+            SwaggerResponse(responseCode = "404", description = "Protocolo não encontrado")
+        ]
+    )
+    @PatchMapping("/bug-reports/{protocol}/status")
+    fun updateReportStatus(
+        @Parameter(description = "Protocolo único do chamado (ex: BUG-20261024-8F2A)")
+        @PathVariable protocol: String,
+        @Parameter(description = "Novo status (OPEN, INVESTIGATING, RESOLVED, CLOSED)")
+        @RequestParam("status") status: String
+    ): ApiResponse<BugReportSummaryDto> {
+        val updated = bugReportService.updateReportStatus(protocol, status)
+        return ApiResponse.ok(updated, "Status do chamado atualizado com sucesso.")
     }
 
     @Operation(

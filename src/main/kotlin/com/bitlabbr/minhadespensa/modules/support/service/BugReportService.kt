@@ -142,6 +142,30 @@ class BugReportService(
     }
 
     @Transactional(readOnly = true)
+    fun getReportSummary(protocol: String): BugReportSummaryDto {
+        val entity = getReportByProtocol(protocol)
+        return BugReportSummaryDto.fromEntity(entity)
+    }
+
+    @Transactional
+    fun updateReportStatus(protocol: String, newStatusRaw: String): BugReportSummaryDto {
+        val targetStatus = BugReportStatus.fromRaw(newStatusRaw)
+            ?: throw BusinessException("Status '$newStatusRaw' inválido. Valores permitidos: OPEN, INVESTIGATING, RESOLVED, CLOSED")
+
+        val entity = getReportByProtocol(protocol)
+        val oldStatus = entity.status
+        entity.status = targetStatus.name
+        entity.updatedAt = System.currentTimeMillis()
+
+        val saved = bugReportRepository.save(entity)
+        logger.info(
+            "[Support:StatusUpdate] Report {} status changed: '{}' -> '{}'",
+            protocol, oldStatus, targetStatus.name
+        )
+        return BugReportSummaryDto.fromEntity(saved)
+    }
+
+    @Transactional(readOnly = true)
     fun getReportByProtocol(protocol: String): BugReportEntity {
         return bugReportRepository.findByProtocol(protocol.trim().uppercase())
             .orElseThrow {

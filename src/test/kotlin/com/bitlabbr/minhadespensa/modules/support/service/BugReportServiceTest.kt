@@ -272,6 +272,63 @@ class BugReportServiceTest {
     }
 
     @Test
+    fun `should get report summary by protocol`() {
+        val entity = BugReportEntity(
+            protocol = "BUG-20261024-SUMM",
+            category = "BUG",
+            title = "Crash ao abrir câmera",
+            description = "Falha no init",
+            appVersion = "1.2.0",
+            deviceModel = "Pixel 6",
+            status = "OPEN"
+        )
+        whenever(bugReportRepository.findByProtocol("BUG-20261024-SUMM")).thenReturn(Optional.of(entity))
+
+        val result = bugReportService.getReportSummary("BUG-20261024-SUMM")
+
+        assertNotNull(result)
+        assertEquals("BUG-20261024-SUMM", result.protocol)
+        assertEquals("Crash ao abrir câmera", result.title)
+        assertEquals("Pixel 6", result.deviceModel)
+    }
+
+    @Test
+    fun `should update report status successfully`() {
+        val entity = BugReportEntity(
+            protocol = "BUG-20261024-STAT",
+            category = "BUG",
+            title = "Crash ao salvar produto",
+            description = "Null pointer ao salvar",
+            appVersion = "1.2.0",
+            status = "OPEN"
+        )
+        whenever(bugReportRepository.findByProtocol("BUG-20261024-STAT")).thenReturn(Optional.of(entity))
+        whenever(bugReportRepository.save(any<BugReportEntity>())).thenAnswer { it.arguments[0] as BugReportEntity }
+
+        val result = bugReportService.updateReportStatus("BUG-20261024-STAT", "INVESTIGATING")
+
+        assertEquals("INVESTIGATING", result.status)
+        assertEquals("INVESTIGATING", entity.status)
+    }
+
+    @Test
+    fun `should throw BusinessException when updating with invalid status`() {
+        val exception = assertThrows<BusinessException> {
+            bugReportService.updateReportStatus("BUG-20261024-STAT", "INVALID_STATUS")
+        }
+        assertTrue(exception.message!!.contains("Status 'INVALID_STATUS' inválido"))
+    }
+
+    @Test
+    fun `should throw ResourceNotFoundException when updating non-existent report`() {
+        whenever(bugReportRepository.findByProtocol("BUG-UNKNOWN")).thenReturn(Optional.empty())
+
+        assertThrows<ResourceNotFoundException> {
+            bugReportService.updateReportStatus("BUG-UNKNOWN", "RESOLVED")
+        }
+    }
+
+    @Test
     fun `should throw ResourceNotFoundException when protocol does not exist`() {
         whenever(bugReportRepository.findByProtocol("BUG-UNKNOWN")).thenReturn(Optional.empty())
 
