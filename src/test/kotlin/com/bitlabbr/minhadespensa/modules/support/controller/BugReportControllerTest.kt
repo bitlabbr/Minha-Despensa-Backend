@@ -27,7 +27,9 @@ import com.bitlabbr.minhadespensa.common.exception.GlobalExceptionHandler
 import com.bitlabbr.minhadespensa.modules.auth.config.SecurityConfig
 import com.bitlabbr.minhadespensa.modules.support.dto.BugReportResponseDto
 import com.bitlabbr.minhadespensa.modules.support.dto.BugReportSummaryDto
+import com.bitlabbr.minhadespensa.modules.support.dto.SupportAdminLoginResponse
 import com.bitlabbr.minhadespensa.modules.support.service.BugReportService
+import com.bitlabbr.minhadespensa.modules.support.service.SupportAuthService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
@@ -37,6 +39,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
 import org.springframework.context.annotation.Import
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.mock.web.MockMultipartFile
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -44,6 +47,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -58,6 +62,9 @@ class BugReportControllerTest {
 
     @MockitoBean
     private lateinit var bugReportService: BugReportService
+
+    @MockitoBean
+    private lateinit var supportAuthService: SupportAuthService
 
     @Test
     fun `POST submitBugReport with file and jwt should return 201 Created`() {
@@ -247,6 +254,37 @@ class BugReportControllerTest {
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate"))
             .andExpect(content().contentType("text/plain;charset=UTF-8"))
             .andExpect(content().string(logContent))
+    }
+
+    @Test
+    fun `POST adminLogin with valid credentials should return 200 OK`() {
+        val authResponse = SupportAdminLoginResponse(
+            accessToken = "admin-jwt-token",
+            username = "admin",
+            expiresInSeconds = 86400L,
+            role = "SYSTEM_ADMIN"
+        )
+
+        whenever(supportAuthService.login(any())).thenReturn(authResponse)
+
+        mockMvc.perform(
+            post("/api/v1/support/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"username":"admin","password":"password123"}""")
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.accessToken").value("admin-jwt-token"))
+            .andExpect(jsonPath("$.data.role").value("SYSTEM_ADMIN"))
+    }
+
+    @Test
+    fun `GET listReports with regular mobile user should return 403 Forbidden`() {
+        mockMvc.perform(
+            get("/api/v1/support/bug-reports")
+                .with(jwt().jwt { it.subject("regular-mobile-user") })
+        )
+            .andExpect(status().isForbidden)
     }
 
     @Test

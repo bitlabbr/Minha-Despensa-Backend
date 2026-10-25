@@ -97,7 +97,8 @@ class SecurityConfig(
                         "/swagger-ui.html",
                         "/support",
                         "/support/",
-                        "/support/**"
+                        "/support/**",
+                        "/api/v1/support/auth/**"
                     ).permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/bug-reports").permitAll()
                     .anyRequest().authenticated()

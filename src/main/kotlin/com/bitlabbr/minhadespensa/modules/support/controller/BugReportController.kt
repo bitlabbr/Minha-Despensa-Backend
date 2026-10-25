@@ -24,15 +24,21 @@
 package com.bitlabbr.minhadespensa.modules.support.controller
 
 import com.bitlabbr.minhadespensa.common.dto.ApiResponse
+import com.bitlabbr.minhadespensa.common.exception.ForbiddenException
+import com.bitlabbr.minhadespensa.common.exception.UnauthorizedException
 import com.bitlabbr.minhadespensa.modules.support.dto.BugReportCreateCommand
 import com.bitlabbr.minhadespensa.modules.support.dto.BugReportResponseDto
 import com.bitlabbr.minhadespensa.modules.support.dto.BugReportSummaryDto
+import com.bitlabbr.minhadespensa.modules.support.dto.SupportAdminLoginRequest
+import com.bitlabbr.minhadespensa.modules.support.dto.SupportAdminLoginResponse
 import com.bitlabbr.minhadespensa.modules.support.service.BugReportService
+import com.bitlabbr.minhadespensa.modules.support.service.SupportAuthService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.responses.ApiResponse as SwaggerResponse
 import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.slf4j.LoggerFactory
 import org.springframework.core.io.Resource
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -44,6 +50,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -56,8 +63,29 @@ import org.springframework.web.multipart.MultipartFile
 @RequestMapping("/api/v1/support")
 @Tag(name = "Suporte e Diagnóstico", description = "Endpoints para registro de bugs, feedback e download de diagnósticos de log")
 class BugReportController(
-    private val bugReportService: BugReportService
+    private val bugReportService: BugReportService,
+    private val supportAuthService: SupportAuthService
 ) {
+
+    private val logger = LoggerFactory.getLogger(BugReportController::class.java)
+
+    @Operation(
+        summary = "Autenticação administrativa do sistema",
+        description = "Autentica o mantenedor/administrador do sistema para acesso ao painel de suporte e diagnósticos."
+    )
+    @ApiResponses(
+        value = [
+            SwaggerResponse(responseCode = "200", description = "Autenticação realizada com sucesso"),
+            SwaggerResponse(responseCode = "401", description = "Credenciais de administrador inválidas")
+        ]
+    )
+    @PostMapping("/auth/login")
+    fun adminLogin(
+        @RequestBody request: SupportAdminLoginRequest
+    ): ApiResponse<SupportAdminLoginResponse> {
+        val response = supportAuthService.login(request)
+        return ApiResponse.ok(response, "Autenticação administrativa realizada com sucesso.")
+    }
 
     @Operation(
         summary = "Submeter relato de suporte, bug ou feedback",
@@ -113,16 +141,19 @@ class BugReportController(
     @ApiResponses(
         value = [
             SwaggerResponse(responseCode = "200", description = "Lista retornada com sucesso"),
-            SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT")
+            SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT"),
+            SwaggerResponse(responseCode = "403", description = "Requer perfil de administrador do sistema")
         ]
     )
     @GetMapping("/bug-reports")
     fun listReports(
+        @AuthenticationPrincipal jwt: Jwt?,
         @Parameter(description = "Filtro por status (OPEN, INVESTIGATING, RESOLVED, CLOSED)")
         @RequestParam(value = "status", required = false) status: String?,
         @Parameter(description = "Filtro por categoria (BUG, SUGGESTION, QUESTION, CRASH)")
         @RequestParam(value = "category", required = false) category: String?
     ): ApiResponse<List<BugReportSummaryDto>> {
+        verifySystemAdmin(jwt)
         val reports = bugReportService.listReports(status, category)
         return ApiResponse.ok(reports)
     }
@@ -135,14 +166,17 @@ class BugReportController(
         value = [
             SwaggerResponse(responseCode = "200", description = "Detalhes do chamado retornados com sucesso"),
             SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT"),
+            SwaggerResponse(responseCode = "403", description = "Requer perfil de administrador do sistema"),
             SwaggerResponse(responseCode = "404", description = "Protocolo não encontrado")
         ]
     )
     @GetMapping("/bug-reports/{protocol}")
     fun getReportByProtocol(
+        @AuthenticationPrincipal jwt: Jwt?,
         @Parameter(description = "Protocolo único do chamado (ex: BUG-20261024-8F2A)")
         @PathVariable protocol: String
     ): ApiResponse<BugReportSummaryDto> {
+        verifySystemAdmin(jwt)
         val summary = bugReportService.getReportSummary(protocol)
         return ApiResponse.ok(summary)
     }
@@ -156,16 +190,19 @@ class BugReportController(
             SwaggerResponse(responseCode = "200", description = "Status atualizado com sucesso"),
             SwaggerResponse(responseCode = "400", description = "Status informado inválido"),
             SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT"),
+            SwaggerResponse(responseCode = "403", description = "Requer perfil de administrador do sistema"),
             SwaggerResponse(responseCode = "404", description = "Protocolo não encontrado")
         ]
     )
     @PatchMapping("/bug-reports/{protocol}/status")
     fun updateReportStatus(
+        @AuthenticationPrincipal jwt: Jwt?,
         @Parameter(description = "Protocolo único do chamado (ex: BUG-20261024-8F2A)")
         @PathVariable protocol: String,
         @Parameter(description = "Novo status (OPEN, INVESTIGATING, RESOLVED, CLOSED)")
         @RequestParam("status") status: String
     ): ApiResponse<BugReportSummaryDto> {
+        verifySystemAdmin(jwt)
         val updated = bugReportService.updateReportStatus(protocol, status)
         return ApiResponse.ok(updated, "Status do chamado atualizado com sucesso.")
     }
@@ -177,19 +214,36 @@ class BugReportController(
     @ApiResponses(
         value = [
             SwaggerResponse(responseCode = "200", description = "Arquivo de log retornado com sucesso"),
+            SwaggerResponse(responseCode = "401", description = "Requer autenticação JWT"),
+            SwaggerResponse(responseCode = "403", description = "Requer perfil de administrador do sistema"),
             SwaggerResponse(responseCode = "404", description = "Protocolo não encontrado ou sem logs anexados")
         ]
     )
     @GetMapping("/bug-reports/{protocol}/log")
     fun downloadLog(
+        @AuthenticationPrincipal jwt: Jwt?,
         @Parameter(description = "Protocolo único do chamado (ex: BUG-20261024-8F2A)")
         @PathVariable protocol: String
     ): ResponseEntity<Resource> {
+        verifySystemAdmin(jwt)
         val (resource, filename) = bugReportService.getLogResource(protocol)
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("text/plain; charset=UTF-8"))
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"$filename\"")
             .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
             .body(resource)
+    }
+
+    private fun verifySystemAdmin(jwt: Jwt?) {
+        if (jwt == null) {
+            throw UnauthorizedException("Autenticação necessária.")
+        }
+        val isSystemAdmin = jwt.subject == "system-admin" ||
+                jwt.getClaim<String>("role") == "SYSTEM_ADMIN" ||
+                jwt.subject == "admin-user"
+        if (!isSystemAdmin) {
+            logger.warn("[Support:Forbidden] Non-admin subject='{}' attempted access to admin endpoint", jwt.subject)
+            throw ForbiddenException("Acesso restrito ao administrador do sistema.")
+        }
     }
 }

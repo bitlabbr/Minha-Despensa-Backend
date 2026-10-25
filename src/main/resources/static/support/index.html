@@ -787,13 +787,13 @@
     <div class="login-header">
       <div class="brand-icon">📦</div>
       <h1 class="login-title">Acesso Restrito</h1>
-      <p class="login-subtitle">Informe suas credenciais de administrador</p>
+      <p class="login-subtitle">Credenciais do Administrador do Sistema</p>
     </div>
     <div class="error-alert" id="loginError"></div>
     <form id="loginForm">
       <div class="form-group">
-        <label class="form-label" for="loginEmail">E-mail</label>
-        <input class="form-input" type="email" id="loginEmail" required placeholder="admin@despensa.app" autocomplete="username">
+        <label class="form-label" for="loginUsername">Usuário</label>
+        <input class="form-input" type="text" id="loginUsername" required placeholder="admin" autocomplete="username">
       </div>
       <div class="form-group">
         <label class="form-label" for="loginPassword">Senha</label>
@@ -1013,7 +1013,7 @@
     const userNav = document.getElementById("userNav");
     const navUserEmail = document.getElementById("navUserEmail");
     const loginForm = document.getElementById("loginForm");
-    const loginEmailInput = document.getElementById("loginEmail");
+    const loginUsernameInput = document.getElementById("loginUsername");
     const loginPasswordInput = document.getElementById("loginPassword");
     const loginError = document.getElementById("loginError");
     const btnRefresh = document.getElementById("btnRefresh");
@@ -1122,27 +1122,27 @@
       submitBtn.disabled = true;
       submitBtn.textContent = "Autenticando...";
 
-      const email = loginEmailInput.value.trim();
+      const username = loginUsernameInput.value.trim();
       const password = loginPasswordInput.value;
 
       try {
-        const response = await fetch("/api/v1/auth/login", {
+        const response = await fetch("/api/v1/support/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ username, password })
         });
 
         const data = await response.json();
         if (!response.ok || !data.success) {
-          throw new Error(data.message || "Credenciais inválidas. Verifique seu e-mail e senha.");
+          throw new Error(data.message || "Credenciais de administrador inválidas.");
         }
 
         authToken = data.data.accessToken;
-        userEmail = data.data.user ? data.data.user.email : email;
+        userEmail = data.data.username || username;
         localStorage.setItem("minha_despensa_token", authToken);
         localStorage.setItem("minha_despensa_user_email", userEmail);
 
-        showToast("Login realizado com sucesso!", "success");
+        showToast("Login administrativo realizado com sucesso!", "success");
         showDashboard();
       } catch (err) {
         loginError.textContent = err.message;

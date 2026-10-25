@@ -193,3 +193,32 @@ data class BugReportSummaryDto(
             )
     }
 }
+
+@Schema(description = "Requisição de login administrativo do sistema")
+data class SupportAdminLoginRequest(
+    @param:Schema(description = "Nome de usuário do administrador", example = "admin")
+    @field:NotBlank(message = "Usuário é obrigatório")
+    val username: String,
+
+    @param:Schema(description = "Senha do administrador", example = "admin")
+    @field:NotBlank(message = "Senha é obrigatória")
+    val password: String
+)
+
+@Schema(description = "Resposta de autenticação do administrador do sistema")
+data class SupportAdminLoginResponse(
+    @param:Schema(description = "Token JWT de acesso", example = "eyJhbGciOi...")
+    val accessToken: String,
+
+    @param:Schema(description = "Tipo do token", example = "Bearer")
+    val tokenType: String = "Bearer",
+
+    @param:Schema(description = "Nome de usuário autenticado", example = "admin")
+    val username: String,
+
+    @param:Schema(description = "Tempo de expiração do token em segundos", example = "86400")
+    val expiresInSeconds: Long,
+
+    @param:Schema(description = "Perfil de autorização", example = "SYSTEM_ADMIN")
+    val role: String = "SYSTEM_ADMIN"
+)

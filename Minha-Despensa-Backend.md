@@ -134,12 +134,13 @@ com.bitlabbr.minhadespensa
 ### 3.7. Suporte, Diagnóstico, Relato de Bugs & Painel Web (`/api/v1/support` & `/support`)
 | Método | Endpoint | Descrição |
 | :--- | :--- | :--- |
-| `GET` | `/support` | Painel Web SPA de Suporte e Diagnósticos (HTML5/Dark Glassmorphism) com login JWT, KPIs em tempo real, filtros, terminal de logs e download de arquivos |
+| `GET` | `/support` | Painel Web SPA de Suporte e Diagnósticos (HTML5/Dark Glassmorphism) com login administrativo, KPIs em tempo real, filtros, terminal de logs e download de arquivos |
+| `POST` | `/api/v1/support/auth/login` | Autenticação exclusiva de administrador do sistema (`SUPPORT_ADMIN_USERNAME` / `SUPPORT_ADMIN_PASSWORD`), emitindo JWT com perfil `SYSTEM_ADMIN` (aberto/permitAll) |
 | `POST` | `/api/v1/support/bug-reports` | Registra chamado de suporte/bug/crash com anexo multipart opcional (`device.log`), gerando protocolo `BUG-YYYYMMDD-XXXX` (aberto/permitAll) |
-| `GET` | `/api/v1/support/bug-reports` | Lista relatos de suporte com filtros opcionais por `status` e `category` (requer Bearer Auth) |
-| `GET` | `/api/v1/support/bug-reports/{protocol}` | Consulta detalhes unitários completos de um chamado pelo protocolo (requer Bearer Auth) |
-| `PATCH` | `/api/v1/support/bug-reports/{protocol}/status` | Atualiza status de triagem do chamado (`OPEN`, `INVESTIGATING`, `RESOLVED`, `CLOSED`) (requer Bearer Auth) |
-| `GET` | `/api/v1/support/bug-reports/{protocol}/log` | Download em stream de texto bruto do `device.log` anexado ao chamado (requer Bearer Auth) |
+| `GET` | `/api/v1/support/bug-reports` | Lista relatos de suporte com filtros opcionais por `status` e `category` (requer perfil `SYSTEM_ADMIN`) |
+| `GET` | `/api/v1/support/bug-reports/{protocol}` | Consulta detalhes unitários completos de um chamado pelo protocolo (requer perfil `SYSTEM_ADMIN`) |
+| `PATCH` | `/api/v1/support/bug-reports/{protocol}/status` | Atualiza status de triagem do chamado (`OPEN`, `INVESTIGATING`, `RESOLVED`, `CLOSED`) (requer perfil `SYSTEM_ADMIN`) |
+| `GET` | `/api/v1/support/bug-reports/{protocol}/log` | Download em stream de texto bruto do `device.log` anexado ao chamado (requer perfil `SYSTEM_ADMIN`) |
 
 ---
 
@@ -223,7 +224,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **125 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`, `support` e `SupportWebViewController`).
+- Suíte completa com **130 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
 - Testes unitários de serviços com simulação de regras LWW, leitura de manifesto OTA, armazenamento de logs de bugs em disco e controle de transações.
 - Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`), rotas abertas de submissão/download e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.
