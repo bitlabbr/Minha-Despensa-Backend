@@ -94,7 +94,10 @@ class SecurityConfig(
                         "/api/v1/test/**",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
-                        "/swagger-ui.html"
+                        "/swagger-ui.html",
+                        "/support",
+                        "/support/",
+                        "/support/**"
                     ).permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/v1/support/bug-reports").permitAll()
                     .anyRequest().authenticated()
