@@ -224,7 +224,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **130 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
+- Suíte completa com **140 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
 - Testes unitários de serviços com simulação de regras LWW, leitura de manifesto OTA, armazenamento de logs de bugs em disco e controle de transações.
 - Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`), rotas abertas de submissão/download e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.
