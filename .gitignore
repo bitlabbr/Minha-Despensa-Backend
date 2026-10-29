@@ -44,3 +44,7 @@ _site/
 
 # Reports and temporary exploration documents
 reports/
+
+# macOS
+.DS_Store
+

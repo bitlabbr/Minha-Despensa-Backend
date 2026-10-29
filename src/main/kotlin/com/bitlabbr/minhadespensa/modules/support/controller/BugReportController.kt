@@ -239,8 +239,7 @@ class BugReportController(
             throw UnauthorizedException("Autenticação necessária.")
         }
         val isSystemAdmin = jwt.subject == "system-admin" ||
-                jwt.getClaim<String>("role") == "SYSTEM_ADMIN" ||
-                jwt.subject == "admin-user"
+                jwt.getClaim<String>("role") == "SYSTEM_ADMIN"
         if (!isSystemAdmin) {
             logger.warn("[Support:Forbidden] Non-admin subject='{}' attempted access to admin endpoint", jwt.subject)
             throw ForbiddenException("Acesso restrito ao administrador do sistema.")

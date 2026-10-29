@@ -157,7 +157,7 @@ class BugReportControllerTest {
 
         mockMvc.perform(
             get("/api/v1/support/bug-reports")
-                .with(jwt().jwt { it.subject("admin-user") })
+                .with(jwt().jwt { it.subject("system-admin").claim("role", "SYSTEM_ADMIN") })
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.success").value(true))
@@ -195,7 +195,7 @@ class BugReportControllerTest {
 
         mockMvc.perform(
             get("/api/v1/support/bug-reports/BUG-20261024-0002")
-                .with(jwt().jwt { it.subject("admin-user") })
+                .with(jwt().jwt { it.subject("system-admin").claim("role", "SYSTEM_ADMIN") })
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.success").value(true))
@@ -228,7 +228,7 @@ class BugReportControllerTest {
         mockMvc.perform(
             patch("/api/v1/support/bug-reports/BUG-20261024-0002/status")
                 .param("status", "RESOLVED")
-                .with(jwt().jwt { it.subject("admin-user") })
+                .with(jwt().jwt { it.subject("system-admin").claim("role", "SYSTEM_ADMIN") })
         )
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.success").value(true))
@@ -247,7 +247,7 @@ class BugReportControllerTest {
 
         mockMvc.perform(
             get("/api/v1/support/bug-reports/BUG-20261024-0001/log")
-                .with(jwt().jwt { it.subject("admin-user") })
+                .with(jwt().jwt { it.subject("system-admin").claim("role", "SYSTEM_ADMIN") })
         )
             .andExpect(status().isOk)
             .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"BUG-20261024-0001-device.log\""))
