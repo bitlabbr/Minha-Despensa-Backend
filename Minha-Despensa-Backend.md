@@ -1,6 +1,6 @@
 # Minha Despensa Backend — Arquitetura, Domínios & Operação
 
-> **Versão:** 2.1.0  
+> **Versão:** 2.2.0  
 > **Última Atualização:** 23/10/2026  
 > **Ambiente de Produção:** Domus Home Server (`https://despensa.domus.arpa`)  
 > **Repositório:** `Minha-Despensa-Backend`  
@@ -210,7 +210,7 @@ O fluxo de implantação no servidor `domus` segue o roteiro padronizado de 5 et
 ./gradlew bootJar -x test
 
 # 3. Transferir o artefato para o servidor via SSH/SCP
-scp build/libs/Minha-Despensa-Backend-2.1.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
+scp build/libs/Minha-Despensa-Backend-2.2.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
 
 # 4. Reconstruir a imagem Docker e reiniciar o container (volumes ./releases:/app/releases e ./bug-reports:/app/bug-reports mapeados)
 ssh domus-vpn "cd /home/willjsan/domus/docker/apps/despensa && docker compose up -d --build"
