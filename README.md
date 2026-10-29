@@ -14,7 +14,7 @@ Backend RESTful e motor de sincronização multi-tenant offline-first (v2.1) par
 - **Banco de Dados:** PostgreSQL 15 (Domus / Local)
 - **Documentação de API:** Springdoc OpenAPI 3 / Swagger UI com Bearer Auth (v2.8.x)
 - **Validação:** Jakarta Bean Validation (Hibernate Validator)
-- **Testes:** JUnit 5, Spring Boot Test, Mockito Kotlin (105 testes, 100% verde)
+- **Testes:** JUnit 5, Spring Boot Test, Mockito Kotlin (140 testes, 100% verde)
 
 ---
 
@@ -41,7 +41,8 @@ com.bitlabbr.minhadespensa
     ├── budget/              # Orçamentos mensais da casa
     ├── sync/                # Motor de Sincronização Bidirecional v2.1 e Aliases
     ├── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
-    └── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
+    ├── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
+    └── support/             # Suporte, Relato de Bugs, Diagnósticos e Painel Web SPA
 ```
 
 ---
@@ -110,6 +111,11 @@ Após iniciar, acesse a documentação interativa e execute chamadas diretamente
 | **Mídia** | `DELETE` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Remove foto e avança `syncVersion` |
 | **App Release** | `GET` | `/api/v1/app/version/latest` | Aberto | Consulta versão mais recente do app Android (OTA) |
 | **App Release** | `GET` | `/api/v1/app/download/latest` | Aberto | Download em stream binário do APK Android mais recente |
+| **Suporte Web** | `GET` | `/support` | Aberto | Painel Web SPA de Suporte e Diagnósticos em Dark Glassmorphism |
+| **Suporte** | `POST` | `/api/v1/support/auth/login` | Aberto | Login de Administrador do Sistema (`SYSTEM_ADMIN`) |
+| **Suporte** | `POST` | `/api/v1/support/bug-reports` | Aberto | Submissão de bug/crash com upload multipart de `device.log` |
+| **Suporte** | `GET` | `/api/v1/support/bug-reports` | Admin Bearer | Listagem e triagem de chamados com filtros |
+| **Suporte** | `PATCH` | `/api/v1/support/bug-reports/{proto}/status` | Admin Bearer | Atualização de status (`OPEN`, `INVESTIGATING`, `RESOLVED`, `CLOSED`) |
 | **Invoice** | `POST` | `/api/v1/invoice/parse` | Aberto | Scraping de nota fiscal via QR Code SEFAZ-PE |
 | **Diagnóstico** | `GET` | `/api/v1/test/hello` | Aberto | Health check da aplicação |
 
