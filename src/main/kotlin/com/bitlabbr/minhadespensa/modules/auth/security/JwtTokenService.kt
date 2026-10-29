@@ -60,6 +60,26 @@ class JwtTokenService(
         return Pair(token, accessExpirationMs / 1000)
     }
 
+    fun generateAdminAccessToken(username: String): Pair<String, Long> {
+        val now = Instant.now()
+        val expiresInSeconds = 86400L // 24 horas para sessão administrativa
+        val expiresAt = now.plusSeconds(expiresInSeconds)
+
+        val claims = JwtClaimsSet.builder()
+            .issuer("minha-despensa")
+            .issuedAt(now)
+            .expiresAt(expiresAt)
+            .subject("system-admin")
+            .claim("username", username)
+            .claim("role", "SYSTEM_ADMIN")
+            .build()
+
+        val jwsHeader = JwsHeader.with { "HS256" }.build()
+        val token = jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).tokenValue
+
+        return Pair(token, expiresInSeconds)
+    }
+
     fun hashToken(rawToken: String): String {
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(rawToken.toByteArray(StandardCharsets.UTF_8))

@@ -95,4 +95,28 @@ class GlobalExceptionHandlerTest {
         assertEquals(405, body?.status)
         assertEquals("Request method 'GET' not supported.", body?.message)
     }
+
+    @Test
+    fun `should handle MissingServletRequestParameterException returning 400 Bad Request`() {
+        val ex = org.springframework.web.bind.MissingServletRequestParameterException("category", "String")
+        val response = handler.handleMissingParameter(ex, request)
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
+        val body = response.body
+        assertNotNull(body)
+        assertEquals(400, body?.status)
+        assertEquals("Required parameter 'category' is missing.", body?.message)
+    }
+
+    @Test
+    fun `should handle MaxUploadSizeExceededException returning 422 Unprocessable Entity`() {
+        val ex = org.springframework.web.multipart.MaxUploadSizeExceededException(5242880)
+        val response = handler.handleMaxUploadSizeExceeded(ex, request)
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.statusCode)
+        val body = response.body
+        assertNotNull(body)
+        assertEquals(422, body?.status)
+        assertEquals("Uploaded file exceeds maximum allowed size.", body?.message)
+    }
 }

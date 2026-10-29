@@ -33,8 +33,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingRequestHeaderException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.multipart.MaxUploadSizeExceededException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -114,6 +116,36 @@ class GlobalExceptionHandler {
             path = request.requestURI
         )
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException::class)
+    fun handleMissingParameter(
+        ex: MissingServletRequestParameterException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        logger.warn("[400 Bad Request] Required parameter missing at {}: {}", request.requestURI, ex.parameterName)
+        val errorResponse = ErrorResponse(
+            status = HttpStatus.BAD_REQUEST.value(),
+            error = HttpStatus.BAD_REQUEST.reasonPhrase,
+            message = "Required parameter '${ex.parameterName}' is missing.",
+            path = request.requestURI
+        )
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse)
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException::class)
+    fun handleMaxUploadSizeExceeded(
+        ex: MaxUploadSizeExceededException,
+        request: HttpServletRequest
+    ): ResponseEntity<ErrorResponse> {
+        logger.warn("[422 Unprocessable Entity] Upload size exceeded at {}: {}", request.requestURI, ex.message)
+        val errorResponse = ErrorResponse(
+            status = HttpStatus.UNPROCESSABLE_ENTITY.value(),
+            error = HttpStatus.UNPROCESSABLE_ENTITY.reasonPhrase,
+            message = "Uploaded file exceeds maximum allowed size.",
+            path = request.requestURI
+        )
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(errorResponse)
     }
 
     @ExceptionHandler(InvalidRequestException::class, IllegalArgumentException::class)
