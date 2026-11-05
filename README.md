@@ -14,7 +14,7 @@ Backend RESTful e motor de sincronização multi-tenant offline-first (v2.1) par
 - **Banco de Dados:** PostgreSQL 15 (Domus / Local)
 - **Documentação de API:** Springdoc OpenAPI 3 / Swagger UI com Bearer Auth (v2.8.x)
 - **Validação:** Jakarta Bean Validation (Hibernate Validator)
-- **Testes:** JUnit 5, Spring Boot Test, Mockito Kotlin (140 testes, 100% verde)
+- **Testes:** JUnit 5, Spring Boot Test, Mockito Kotlin (157 testes, 100% verde)
 
 ---
 
@@ -106,6 +106,8 @@ Após iniciar, acesse a documentação interativa e execute chamadas diretamente
 | **Household** | `POST` | `/api/v1/households/join` | Bearer Auth | Ingressar via código de convite `CASA-XXXXXXXX` |
 | **Sync** | `POST` | `/api/v1/sync/push` | Bearer + `X-Household-Id` | Envio em lote das 8 coleções (LWW + Aliases) |
 | **Sync** | `GET` | `/api/v1/sync/pull?since={v}` | Bearer + `X-Household-Id` | Download de deltas com `serverVersion > since` |
+| **Catálogo Global** | `GET` | `/api/v1/catalog/global/{ean}` | Bearer Auth | Consulta produto no catálogo centralizado por EAN |
+| **Catálogo Global** | `GET` | `/api/v1/catalog/global/search` | Bearer Auth | Busca produtos no catálogo global por nome, marca ou EAN |
 | **Mídia** | `PUT` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Upload de foto (WebP/JPEG até 200KB) |
 | **Mídia** | `GET` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Download de foto com suporte a ETag |
 | **Mídia** | `DELETE` | `/api/v1/media/products/{id}` | Bearer + `X-Household-Id` | Remove foto e avança `syncVersion` |

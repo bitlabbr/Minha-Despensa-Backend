@@ -331,4 +331,48 @@ class ProductServiceTest {
         assertEquals(30L, existing.serverVersion)
         verify(productRepository).save(existing)
     }
+
+    @Test
+    fun `upsertForSync should ingest consolidated active product with EAN into GlobalProductService`() {
+        val globalProductService: GlobalProductService = mock()
+        val serviceWithGlobal = ProductService(productRepository, aliasRepository, productMediaRepository, globalProductService)
+
+        val canonical = ProductEntity(
+            householdId = householdId,
+            id = "prod-1",
+            ean = "7891000100103",
+            name = "Leite Moça",
+            brand = "Nestlé",
+            category = "Laticínios",
+            measureUnit = MeasureUnit.GRAM,
+            netWeight = 395.0,
+            updatedAt = 1000L
+        )
+        val dto = ProductRequestDto(
+            id = "prod-duplicate-id",
+            ean = "7891000100103",
+            name = "Leite Condensado Moça",
+            brand = null, // deve preservar 'Nestlé' da entidade canônica na colisão de deduplicação
+            category = "Laticínios",
+            measureUnit = MeasureUnit.GRAM,
+            netWeight = 395.0,
+            updatedAt = 2000L
+        )
+
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "prod-duplicate-id")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-duplicate-id")).thenReturn(Optional.empty())
+        whenever(productRepository.findByHouseholdIdAndEan(householdId, "7891000100103")).thenReturn(Optional.of(canonical))
+        whenever(productRepository.save(canonical)).thenReturn(canonical)
+
+        serviceWithGlobal.upsertForSync(householdId, dto, syncVersion = 12L)
+
+        verify(globalProductService).ingestFromUserProduct(
+            ean = "7891000100103",
+            name = "Leite Condensado Moça",
+            brand = "Nestlé",
+            category = "Laticínios",
+            measureUnit = MeasureUnit.GRAM,
+            netWeight = 395.0
+        )
+    }
 }

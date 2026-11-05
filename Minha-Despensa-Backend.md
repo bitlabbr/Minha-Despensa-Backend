@@ -1,7 +1,7 @@
 # Minha Despensa Backend — Arquitetura, Domínios & Operação
 
-> **Versão:** 2.2.0  
-> **Última Atualização:** 23/10/2026  
+> **Versão:** 2.2.1  
+> **Última Atualização:** 05/11/2026  
 > **Ambiente de Produção:** Domus Home Server (`https://despensa.domus.arpa`)  
 > **Repositório:** `Minha-Despensa-Backend`  
 > **Cliente Integrado:** [Minha-Dispensa (Compose Multiplatform / Room)](../Minha-Dispensa)
@@ -31,14 +31,16 @@ flowchart TD
         API["Controllers REST (/api/v1/*)"]
         Engine["Motor de Sincronização v2.1<br/>(Lock Pessimista + syncVersion + LWW)"]
         Dedupe["Deduplicação Híbrida (UUIDv5 + Aliases)"]
+        GlobalCat["Catálogo Centralizado Global<br/>(Enriquecimento Inteligente por EAN)"]
         Scraper["NFC-e SEFAZ Scraper (Jsoup)"]
         Security --> API
-        API --> Engine & Dedupe & Scraper
+        API --> Engine & Dedupe & GlobalCat & Scraper
+        Engine & Scraper --> GlobalCat
     end
 
     subgraph Storage["Armazenamento Autoritativo"]
-        Postgres[("PostgreSQL 15 (Container)<br/>Flyway V1 Multi-Tenant Schema")]
-        Engine & Dedupe --> Postgres
+        Postgres[("PostgreSQL 15 (Container)<br/>Flyway V1..V3 Schema")]
+        Engine & Dedupe & GlobalCat --> Postgres
     end
 
     SyncWorker -- "Push / Pull Delta (X-Household-Id)" --> Traefik
@@ -70,14 +72,15 @@ com.bitlabbr.minhadespensa
 └── modules/                 # Módulos verticais de negócio
     ├── auth/                # Autenticação JWT, Registro, Rotação e Revogação
     ├── household/           # Gestão de Casas, Convites Crockford e Controle de Membros
-    ├── catalog/             # Catálogo de Produtos, Categorias e Mídia (Fotos WebP)
+    ├── catalog/             # Catálogo de Produtos (Casa e Centralizado Global por EAN), Categorias e Mídia (Fotos WebP)
     ├── pantry/              # Itens de Despensa (Estoque) e Movimentações (Livro-Razão)
     ├── shoppinglist/        # Listas e Itens de Compras com Cascade Tombstone
     ├── price/               # Histórico de Preços por Estabelecimento
     ├── budget/              # Orçamentos Mensais
     ├── sync/                # Motor de Sincronização Bidirecional v2.1 e Aliases
     ├── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
-    └── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
+    ├── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
+    └── support/             # Suporte, Relato de Bugs, Diagnósticos e Painel Web SPA
 ```
 
 ---
@@ -142,6 +145,12 @@ com.bitlabbr.minhadespensa
 | `PATCH` | `/api/v1/support/bug-reports/{protocol}/status` | Atualiza status de triagem do chamado (`OPEN`, `INVESTIGATING`, `RESOLVED`, `CLOSED`) (requer perfil `SYSTEM_ADMIN`) |
 | `GET` | `/api/v1/support/bug-reports/{protocol}/log` | Download em stream de texto bruto do `device.log` anexado ao chamado (requer perfil `SYSTEM_ADMIN`) |
 
+### 3.8. Catálogo Centralizado Global (`/api/v1/catalog/global`) — Requer Bearer Auth
+| Método | Endpoint | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/catalog/global/{ean}` | Consulta metadados consolidados de um produto no catálogo centralizado por código EAN (8, 12, 13 ou 14 dígitos) |
+| `GET` | `/api/v1/catalog/global/search` | Busca paginada no catálogo global por nome normalizado, marca ou prefixo de EAN (`query`, `limit`) |
+
 ---
 
 ## 4. 🔄 Topologia do Motor de Sincronização Bidirecional v2.1
@@ -177,6 +186,7 @@ Quando um dispositivo envia um produto no Push:
 6. **Categorias (`product_categories`):** Processadas analogamente em `ProductCategoryService.upsertForSync`. A busca por `normalizedName` precede o ID; caso colida, registra o alias, desambigua o nome da obsoleta (`#deleted#id`) e retorna `categoryIdMappings`.
 7. **Integridade de Listas de Compras:** Itens de lista (`shopping_items`) sem a respectiva lista pai ou com `productId` inexistente na casa são rejeitados de forma graciosa em `SyncRejectedItemDto`, sem interromper o lote e evitando falhas de chave estrangeira no SQLite móvel.
 8. **Migration Flyway:** Os índices parciais únicos em `V1__init_multi_tenant_schema.sql` contêm `WHERE is_deleted = FALSE`, garantindo que produtos e categorias soft-deleted nunca bloqueiem novos cadastros com o mesmo EAN ou nome.
+9. **Catálogo Centralizado Global por EAN (`global_products`):** Alimentado organicamente e em transação independente (`REQUIRES_NEW`) pelas leituras de notas fiscais SEFAZ (`SEFAZ_INVOICE`) e sincronizações de produtos dos usuários (`USER_SYNC`). Gera `id` determinístico `UUIDv5` (`DeterministicIdUtils.productIdForEan`), fixa a categoria imutável `"Outros"` para evitar vazamento de categorias customizadas entre casas, não armazena mídia/fotos, bloqueia códigos internos de balança (EAN-13 prefixo `20..29`), converte siglas fiscais (`KG`, `LT`, `UN`, `PCT`) para `MeasureUnit` e enriquece marcas, pesos e nomes priorizando descrições curadas por usuários (`USER_SYNC`) sobre abreviações de nota fiscal.
 
 ---
 
@@ -193,7 +203,7 @@ flowchart LR
 - **DNS / Domínio:** `https://despensa.domus.arpa`
 - **Proxy Reverso:** Traefik v3.0 escutando em `websecure` (:443) com roteamento para `http://despensa_api:8080`.
 - **Banco de Dados:** PostgreSQL 15 (`despensa_user` / `despensa`).
-- **Migrações:** Flyway (`V1__init_multi_tenant_schema.sql`, `V2__init_support_and_bug_reports.sql`).
+- **Migrações:** Flyway (`V1__init_multi_tenant_schema.sql`, `V2__init_support_and_bug_reports.sql`, `V3__init_global_catalog_schema.sql`).
 - **Armazenamento de Arquivos:** Volumes persistentes `./releases:/app/releases` (APKs OTA) e `./bug-reports:/app/bug-reports` (logs de diagnóstico e metadados).
 
 ---
@@ -210,7 +220,7 @@ O fluxo de implantação no servidor `domus` segue o roteiro padronizado de 5 et
 ./gradlew bootJar -x test
 
 # 3. Transferir o artefato para o servidor via SSH/SCP
-scp build/libs/Minha-Despensa-Backend-2.2.0-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
+scp build/libs/Minha-Despensa-Backend-2.2.1-SNAPSHOT.jar domus-vpn:~/domus/docker/apps/despensa/app.jar
 
 # 4. Reconstruir a imagem Docker e reiniciar o container (volumes ./releases:/app/releases e ./bug-reports:/app/bug-reports mapeados)
 ssh domus-vpn "cd /home/willjsan/domus/docker/apps/despensa && docker compose up -d --build"
@@ -224,7 +234,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **140 testes automatizados** cobrindo todos os módulos (incluindo `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
+- Suíte completa com **157 testes automatizados** cobrindo todos os módulos (incluindo `catalog` global, `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
 - Testes unitários de serviços com simulação de regras LWW, leitura de manifesto OTA, armazenamento de logs de bugs em disco e controle de transações.
 - Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`), rotas abertas de submissão/download e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.

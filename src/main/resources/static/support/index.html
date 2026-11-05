@@ -330,12 +330,35 @@
       background: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-md);
-      overflow: hidden;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: #374151 rgba(17, 24, 39, 0.7);
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    .table-container::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    .table-container::-webkit-scrollbar-track {
+      background: rgba(17, 24, 39, 0.7);
+      border-radius: var(--radius-sm);
+    }
+
+    .table-container::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: var(--radius-sm);
+    }
+
+    .table-container::-webkit-scrollbar-thumb:hover {
+      background: #4B5563;
     }
 
     table {
       width: 100%;
+      min-width: 980px;
       border-collapse: collapse;
       text-align: left;
       font-size: 0.88rem;
@@ -350,6 +373,13 @@
       font-size: 0.75rem;
       letter-spacing: 0.05em;
       border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    th:last-child,
+    td:last-child {
+      white-space: nowrap;
+      min-width: 120px;
     }
 
     td {
@@ -419,9 +449,10 @@
     }
 
     .table-actions {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 0.5rem;
+      white-space: nowrap;
     }
 
     .btn-icon {
@@ -750,10 +781,59 @@
       to { transform: translateX(0); opacity: 1; }
     }
 
+    .scroll-hint {
+      display: none;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      text-align: right;
+    }
+
+    @media (max-width: 992px) {
+      .scroll-hint {
+        display: block;
+      }
+    }
+
     @media (max-width: 768px) {
       .container { padding: 1rem; }
       .detail-grid { grid-template-columns: 1fr; }
-      header { padding: 0.8rem 1rem; }
+      header {
+        padding: 0.8rem 1rem;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+      .user-nav {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .search-input-wrapper {
+        min-width: 100%;
+      }
+      .toggle-logs {
+        margin-left: 0;
+      }
+      .modal-dialog {
+        max-width: 100%;
+        margin: 0.5rem;
+        max-height: 95vh;
+      }
+      .status-select-wrap {
+        flex-wrap: wrap;
+      }
+      .modal-footer {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .user-nav {
+        width: 100%;
+        justify-content: flex-end;
+      }
+      .kpi-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -867,6 +947,7 @@
     </div>
 
     <!-- TABLE -->
+    <div class="scroll-hint">👉 Deslize horizontalmente para visualizar mais colunas e ações</div>
     <div class="table-container">
       <table>
         <thead>

@@ -23,6 +23,7 @@
 
 package com.bitlabbr.minhadespensa.modules.invoice.service
 
+import com.bitlabbr.minhadespensa.modules.catalog.service.GlobalProductService
 import com.bitlabbr.minhadespensa.modules.invoice.dto.InvoiceItemResponseDto
 import com.bitlabbr.minhadespensa.modules.invoice.dto.InvoiceResponseDto
 import org.jsoup.Jsoup
@@ -30,6 +31,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.parser.Parser
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import java.net.URI
 import java.text.Normalizer
@@ -40,7 +42,10 @@ import java.util.regex.Pattern
 import kotlin.math.roundToLong
 
 @Service
-class InvoiceParseService {
+class InvoiceParseService(
+    @Autowired(required = false)
+    private val globalProductService: GlobalProductService? = null
+) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -110,6 +115,16 @@ class InvoiceParseService {
             rawItems.size,
             items.size
         )
+
+        if (globalProductService != null) {
+            for (item in items) {
+                try {
+                    globalProductService.ingestFromInvoiceItem(item)
+                } catch (ex: Exception) {
+                    logger.warn("[Invoice:GlobalCatalog] Failed to ingest item EAN={} into global catalog: {}", item.ean, ex.message)
+                }
+            }
+        }
 
         return InvoiceResponseDto(
             accessKey = accessKey,
