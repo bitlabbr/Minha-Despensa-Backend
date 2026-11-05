@@ -41,7 +41,7 @@ data class GlobalProductResponseDto(
     @Schema(description = "Marca do produto", example = "Nestlé")
     val brand: String?,
 
-    @Schema(description = "Categoria do produto", example = "Laticínios")
+    @Schema(description = "Categoria fixa padrão do catálogo global", example = "Outros")
     val category: String,
 
     @Schema(description = "Unidade de medida padronizada", example = "GRAM")

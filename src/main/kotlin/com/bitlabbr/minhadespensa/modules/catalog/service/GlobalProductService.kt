@@ -44,6 +44,7 @@ class GlobalProductService(
     private val logger = LoggerFactory.getLogger(GlobalProductService::class.java)
 
     companion object {
+        const val FIXED_GLOBAL_CATEGORY = "Outros"
         private val VALID_EAN_LENGTHS = setOf(8, 12, 13, 14)
         private val IN_STORE_RESTRICTED_PREFIXES = (20..29).map { it.toString() }.toSet()
     }
@@ -127,7 +128,6 @@ class GlobalProductService(
             ean = cleanEan,
             name = name,
             brand = null,
-            category = "Geral",
             measureUnit = unit,
             netWeight = 1.0,
             source = "SEFAZ_INVOICE"
@@ -139,7 +139,7 @@ class GlobalProductService(
         ean: String?,
         name: String,
         brand: String?,
-        category: String?,
+        category: String? = null,
         measureUnit: MeasureUnit,
         netWeight: Double
     ): GlobalProductEntity? {
@@ -152,7 +152,6 @@ class GlobalProductService(
             ean = cleanEan!!,
             name = cleanName,
             brand = brand?.trim()?.takeIf { it.isNotEmpty() },
-            category = category?.trim()?.takeIf { it.isNotEmpty() } ?: "Geral",
             measureUnit = measureUnit,
             netWeight = if (netWeight > 0.0) netWeight else 1.0,
             source = "USER_SYNC"
@@ -164,25 +163,22 @@ class GlobalProductService(
         ean: String,
         name: String,
         brand: String?,
-        category: String,
         measureUnit: MeasureUnit,
         netWeight: Double,
         source: String
     ): GlobalProductEntity {
         val existingOpt = globalProductRepository.findByEan(ean)
         val now = System.currentTimeMillis()
+        val deterministicId = DeterministicIdUtils.productIdForEan(ean)
 
         return if (existingOpt.isPresent) {
             val existing = existingOpt.get()
             existing.occurrenceCount += 1
             existing.updatedAt = now
+            existing.category = FIXED_GLOBAL_CATEGORY
 
             if (existing.brand.isNullOrBlank() && !brand.isNullOrBlank()) {
                 existing.brand = brand
-            }
-
-            if ((existing.category == "Geral" || existing.category == "Outros") && category != "Geral" && category != "Outros") {
-                existing.category = category
             }
 
             val wasSefazSource = existing.source == "SEFAZ_INVOICE"
@@ -210,15 +206,16 @@ class GlobalProductService(
                 existing.netWeight = netWeight
             }
 
-            logger.info("[Catalog:Global] Enriched global product EAN={} ('{}', occurrences={}) from source={}", ean, existing.name, existing.occurrenceCount, source)
+            logger.info("[Catalog:Global] Enriched global product EAN={} (id={}, '{}', occurrences={}) from source={}", ean, existing.id, existing.name, existing.occurrenceCount, source)
             globalProductRepository.save(existing)
         } else {
             val entity = GlobalProductEntity(
+                id = deterministicId,
                 ean = ean,
                 name = name,
                 normalizedName = DeterministicIdUtils.normalizeText(name),
                 brand = brand,
-                category = category,
+                category = FIXED_GLOBAL_CATEGORY,
                 measureUnit = measureUnit,
                 netWeight = netWeight,
                 source = source,
@@ -227,7 +224,7 @@ class GlobalProductService(
                 updatedAt = now
             )
             val saved = globalProductRepository.save(entity)
-            logger.info("[Catalog:Global] Ingested new global product EAN={} ('{}') from source={}", ean, name, source)
+            logger.info("[Catalog:Global] Ingested new global product EAN={} (id={}, '{}') from source={}", ean, saved.id, name, source)
             saved
         }
     }

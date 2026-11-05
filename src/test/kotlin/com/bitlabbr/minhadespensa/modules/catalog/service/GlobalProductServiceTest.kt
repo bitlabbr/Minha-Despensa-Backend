@@ -25,6 +25,7 @@ package com.bitlabbr.minhadespensa.modules.catalog.service
 
 import com.bitlabbr.minhadespensa.common.exception.ResourceNotFoundException
 import com.bitlabbr.minhadespensa.common.exception.ValidationException
+import com.bitlabbr.minhadespensa.common.util.DeterministicIdUtils
 import com.bitlabbr.minhadespensa.modules.catalog.domain.MeasureUnit
 import com.bitlabbr.minhadespensa.modules.catalog.entity.GlobalProductEntity
 import com.bitlabbr.minhadespensa.modules.catalog.repository.GlobalProductRepository
@@ -140,9 +141,11 @@ class GlobalProductServiceTest {
         val saved = globalProductService.ingestFromInvoiceItem(item)
 
         assertNotNull(saved)
-        assertEquals("7891000100103", saved!!.ean)
+        assertEquals(DeterministicIdUtils.productIdForEan("7891000100103"), saved!!.id)
+        assertEquals("7891000100103", saved.ean)
         assertEquals("ARROZ TIPO 1 CAMIL", saved.name)
         assertEquals("arroz tipo 1 camil", saved.normalizedName)
+        assertEquals("Outros", saved.category)
         assertEquals(MeasureUnit.KILOGRAM, saved.measureUnit)
         assertEquals(1.0, saved.netWeight)
         assertEquals("SEFAZ_INVOICE", saved.source)
@@ -178,14 +181,14 @@ class GlobalProductServiceTest {
     }
 
     @Test
-    fun `ingestFromUserProduct should enrich brand, category, measureUnit and override SEFAZ_INVOICE name`() {
+    fun `ingestFromUserProduct should enrich brand, measureUnit, override SEFAZ_INVOICE name and keep fixed category Outros`() {
         val existingFromSefaz = GlobalProductEntity(
-            id = "global-1",
+            id = DeterministicIdUtils.productIdForEan("7891000100103"),
             ean = "7891000100103",
             name = "LEIT COND MOCA NESTLE LATA",
             normalizedName = "leit cond moca nestle lata",
             brand = null,
-            category = "Geral",
+            category = "Outros",
             measureUnit = MeasureUnit.UNIT,
             netWeight = 1.0,
             source = "SEFAZ_INVOICE",
@@ -198,7 +201,7 @@ class GlobalProductServiceTest {
             ean = "7891000100103",
             name = "Leite Condensado Moça",
             brand = "Nestlé",
-            category = "Laticínios",
+            category = "Coisinhas Customizadas da Casa",
             measureUnit = MeasureUnit.GRAM,
             netWeight = 395.0
         )
@@ -207,7 +210,7 @@ class GlobalProductServiceTest {
         assertEquals("Leite Condensado Moça", saved!!.name)
         assertEquals("leite condensado moca", saved.normalizedName)
         assertEquals("Nestlé", saved.brand)
-        assertEquals("Laticínios", saved.category)
+        assertEquals("Outros", saved.category)
         assertEquals(MeasureUnit.GRAM, saved.measureUnit)
         assertEquals(395.0, saved.netWeight)
         assertEquals("USER_SYNC", saved.source)
@@ -274,7 +277,7 @@ class GlobalProductServiceTest {
         assertNotNull(saved)
         assertEquals("Arroz Tio João Tipo 1", saved!!.name)
         assertEquals("Tio João", saved.brand)
-        assertEquals("Alimentos", saved.category)
+        assertEquals("Outros", saved.category)
         assertEquals(MeasureUnit.KILOGRAM, saved.measureUnit)
         assertEquals(5.0, saved.netWeight)
         assertEquals("USER_SYNC", saved.source)

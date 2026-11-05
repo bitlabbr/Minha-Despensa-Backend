@@ -61,7 +61,7 @@ class GlobalProductEntity(
     var brand: String? = null,
 
     @Column(name = "category", length = 100, nullable = false)
-    var category: String = "Geral",
+    var category: String = "Outros",
 
     @Enumerated(EnumType.STRING)
     @Column(name = "measure_unit", length = 30, nullable = false)
