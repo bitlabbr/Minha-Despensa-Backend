@@ -54,6 +54,8 @@ class InvalidRequestException(
     message: String
 ) : BusinessException(message)
 
+typealias ValidationException = InvalidRequestException
+
 /**
  * Exceção lançada quando a requisição não possui credenciais válidas ou o token expirou (401).
  */
