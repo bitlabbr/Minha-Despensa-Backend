@@ -349,18 +349,18 @@ class ProductServiceTest {
             updatedAt = 1000L
         )
         val dto = ProductRequestDto(
-            id = "prod-1",
+            id = "prod-duplicate-id",
             ean = "7891000100103",
             name = "Leite Condensado Moça",
-            brand = null, // deve preservar 'Nestlé' da entidade consolidada se dto.brand for null na colisão ou usar consolidado
+            brand = null, // deve preservar 'Nestlé' da entidade canônica na colisão de deduplicação
             category = "Laticínios",
             measureUnit = MeasureUnit.GRAM,
             netWeight = 395.0,
             updatedAt = 2000L
         )
 
-        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "prod-1")).thenReturn(null)
-        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-1")).thenReturn(Optional.of(canonical))
+        whenever(aliasRepository.findCanonicalId(householdId, "PRODUCT", "prod-duplicate-id")).thenReturn(null)
+        whenever(productRepository.findByHouseholdIdAndId(householdId, "prod-duplicate-id")).thenReturn(Optional.empty())
         whenever(productRepository.findByHouseholdIdAndEan(householdId, "7891000100103")).thenReturn(Optional.of(canonical))
         whenever(productRepository.save(canonical)).thenReturn(canonical)
 
@@ -369,7 +369,7 @@ class ProductServiceTest {
         verify(globalProductService).ingestFromUserProduct(
             ean = "7891000100103",
             name = "Leite Condensado Moça",
-            brand = null,
+            brand = "Nestlé",
             category = "Laticínios",
             measureUnit = MeasureUnit.GRAM,
             netWeight = 395.0

@@ -83,10 +83,15 @@ class GlobalProductService(
     fun getProductByEan(ean: String): GlobalProductResponseDto {
         val cleanEan = ean.trim()
         if (!isValidEan(cleanEan)) {
+            logger.warn("[Catalog:Global] Invalid EAN format requested: '{}'", ean)
             throw ValidationException("Código EAN inválido: '$ean'. Deve conter 8, 12, 13 ou 14 dígitos numéricos válidos.")
         }
         val entity = globalProductRepository.findByEan(cleanEan)
-            .orElseThrow { ResourceNotFoundException("Produto global com EAN '$cleanEan' não encontrado no catálogo centralizado.") }
+            .orElseThrow {
+                logger.debug("[Catalog:Global] Product not found for EAN={}", cleanEan)
+                ResourceNotFoundException("Produto global com EAN '$cleanEan' não encontrado no catálogo centralizado.")
+            }
+        logger.debug("[Catalog:Global] Lookup hit for EAN={} ('{}', occurrences={})", cleanEan, entity.name, entity.occurrenceCount)
         return GlobalProductResponseDto.fromEntity(entity)
     }
 
@@ -96,10 +101,14 @@ class GlobalProductService(
         if (trimmed.length < 2) {
             return emptyList()
         }
-        val pageable = PageRequest.of(0, limit.coerceIn(1, 50))
+        val effectiveLimit = limit.coerceIn(1, 50)
+        val pageable = PageRequest.of(0, effectiveLimit)
         val normalized = DeterministicIdUtils.normalizeText(trimmed)
-        return globalProductRepository.searchProducts(normalized, pageable)
+        val rawLower = trimmed.lowercase()
+        val results = globalProductRepository.searchProducts(normalized, rawLower, pageable)
             .map { GlobalProductResponseDto.fromEntity(it) }
+        logger.debug("[Catalog:Global] Search query='{}' (limit={}) returned {} results", trimmed, effectiveLimit, results.size)
+        return results
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -176,7 +185,9 @@ class GlobalProductService(
                 existing.category = category
             }
 
-            if (source == "USER_SYNC" && existing.source == "SEFAZ_INVOICE") {
+            val wasSefazSource = existing.source == "SEFAZ_INVOICE"
+
+            if (source == "USER_SYNC" && wasSefazSource) {
                 existing.name = name
                 existing.normalizedName = DeterministicIdUtils.normalizeText(name)
                 existing.source = "USER_SYNC"
@@ -187,6 +198,15 @@ class GlobalProductService(
 
             if (existing.measureUnit == MeasureUnit.UNIT && measureUnit != MeasureUnit.UNIT) {
                 existing.measureUnit = measureUnit
+                existing.netWeight = netWeight
+            } else if (source == "USER_SYNC" && wasSefazSource) {
+                if (measureUnit != MeasureUnit.UNIT) {
+                    existing.measureUnit = measureUnit
+                }
+                if (netWeight > 0.0 && (measureUnit != MeasureUnit.UNIT || netWeight != 1.0)) {
+                    existing.netWeight = netWeight
+                }
+            } else if (existing.measureUnit == measureUnit && existing.netWeight == 1.0 && netWeight > 1.0) {
                 existing.netWeight = netWeight
             }
 

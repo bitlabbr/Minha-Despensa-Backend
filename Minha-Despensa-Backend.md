@@ -72,14 +72,15 @@ com.bitlabbr.minhadespensa
 └── modules/                 # Módulos verticais de negócio
     ├── auth/                # Autenticação JWT, Registro, Rotação e Revogação
     ├── household/           # Gestão de Casas, Convites Crockford e Controle de Membros
-    ├── catalog/             # Catálogo de Produtos, Categorias e Mídia (Fotos WebP)
+    ├── catalog/             # Catálogo de Produtos (Casa e Centralizado Global por EAN), Categorias e Mídia (Fotos WebP)
     ├── pantry/              # Itens de Despensa (Estoque) e Movimentações (Livro-Razão)
     ├── shoppinglist/        # Listas e Itens de Compras com Cascade Tombstone
     ├── price/               # Histórico de Preços por Estabelecimento
     ├── budget/              # Orçamentos Mensais
     ├── sync/                # Motor de Sincronização Bidirecional v2.1 e Aliases
     ├── invoice/             # Leitura e parsing de Nota Fiscal SEFAZ-PE via QR Code
-    └── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
+    ├── apprelease/          # Distribuição OTA de APKs Android e Metadados de Versão
+    └── support/             # Suporte, Relato de Bugs, Diagnósticos e Painel Web SPA
 ```
 
 ---
@@ -233,7 +234,7 @@ ssh domus-vpn "docker logs --tail 30 despensa_api"
 ## 7. 🧪 Política de Testes Automatizados
 
 O backend adota a política de **100% de Testes Verdes Obrigatórios**:
-- Suíte completa com **156 testes automatizados** cobrindo todos os módulos (incluindo `catalog` global, `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
+- Suíte completa com **157 testes automatizados** cobrindo todos os módulos (incluindo `catalog` global, `apprelease`, `support`, autenticação administrativa e `SupportWebViewController`).
 - Testes unitários de serviços com simulação de regras LWW, leitura de manifesto OTA, armazenamento de logs de bugs em disco e controle de transações.
 - Testes de controladores MVC validando segurança, headers obrigatórios (`X-Household-Id`), rotas abertas de submissão/download e códigos HTTP de resposta.
 - Teste de integração ponta a ponta (`HouseholdMultiDeviceSyncIntegrationTest`) simulando concorrência multi-dispositivo, deduplicação de EANs e tombstones em cascata.

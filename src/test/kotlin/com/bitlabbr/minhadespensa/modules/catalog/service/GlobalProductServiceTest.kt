@@ -246,17 +246,54 @@ class GlobalProductServiceTest {
     }
 
     @Test
-    fun `searchProducts should return empty list for short query and delegate to repository with capped limit`() {
+    fun `ingestFromUserProduct should enrich netWeight and measureUnit even when SEFAZ_INVOICE had non-UNIT measureUnit`() {
+        val existingFromSefaz = GlobalProductEntity(
+            id = "global-arroz",
+            ean = "7891111111111",
+            name = "ARROZ TIO JOAO 5KG",
+            normalizedName = "arroz tio joao 5kg",
+            brand = null,
+            category = "Geral",
+            measureUnit = MeasureUnit.KILOGRAM,
+            netWeight = 1.0,
+            source = "SEFAZ_INVOICE",
+            occurrenceCount = 2L
+        )
+        whenever(globalProductRepository.findByEan("7891111111111")).thenReturn(Optional.of(existingFromSefaz))
+        whenever(globalProductRepository.save(any<GlobalProductEntity>())).thenAnswer { it.arguments[0] }
+
+        val saved = globalProductService.ingestFromUserProduct(
+            ean = "7891111111111",
+            name = "Arroz Tio João Tipo 1",
+            brand = "Tio João",
+            category = "Alimentos",
+            measureUnit = MeasureUnit.KILOGRAM,
+            netWeight = 5.0
+        )
+
+        assertNotNull(saved)
+        assertEquals("Arroz Tio João Tipo 1", saved!!.name)
+        assertEquals("Tio João", saved.brand)
+        assertEquals("Alimentos", saved.category)
+        assertEquals(MeasureUnit.KILOGRAM, saved.measureUnit)
+        assertEquals(5.0, saved.netWeight)
+        assertEquals("USER_SYNC", saved.source)
+        assertEquals(3L, saved.occurrenceCount)
+    }
+
+    @Test
+    fun `searchProducts should return empty list for short query and delegate normalized and raw queries to repository`() {
         assertTrue(globalProductService.searchProducts("a", 20).isEmpty())
-        verify(globalProductRepository, never()).searchProducts(any(), any())
+        verify(globalProductRepository, never()).searchProducts(any(), any(), any())
 
         val entity = GlobalProductEntity(
             id = "global-1",
             ean = "7891000100103",
             name = "Café Pilão",
-            normalizedName = "cafe pilao"
+            normalizedName = "cafe pilao",
+            brand = "Pilão"
         )
-        whenever(globalProductRepository.searchProducts(eq("cafe"), eq(PageRequest.of(0, 50))))
+        whenever(globalProductRepository.searchProducts(eq("cafe"), eq("café"), eq(PageRequest.of(0, 50))))
             .thenReturn(listOf(entity))
 
         val results = globalProductService.searchProducts("Café", 100)

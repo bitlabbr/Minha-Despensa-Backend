@@ -41,11 +41,16 @@ interface GlobalProductRepository : JpaRepository<GlobalProductEntity, String> {
     @Query(
         """
         SELECT gp FROM GlobalProductEntity gp
-        WHERE gp.normalizedName LIKE CONCAT('%', :query, '%')
-           OR LOWER(gp.brand) LIKE CONCAT('%', :query, '%')
-           OR gp.ean LIKE CONCAT(:query, '%')
+        WHERE gp.normalizedName LIKE CONCAT('%', :normalizedQuery, '%')
+           OR LOWER(gp.brand) LIKE CONCAT('%', :normalizedQuery, '%')
+           OR LOWER(gp.brand) LIKE CONCAT('%', :rawQuery, '%')
+           OR gp.ean LIKE CONCAT(:normalizedQuery, '%')
         ORDER BY gp.occurrenceCount DESC, gp.updatedAt DESC
         """
     )
-    fun searchProducts(@Param("query") query: String, pageable: Pageable): List<GlobalProductEntity>
+    fun searchProducts(
+        @Param("normalizedQuery") normalizedQuery: String,
+        @Param("rawQuery") rawQuery: String,
+        pageable: Pageable
+    ): List<GlobalProductEntity>
 }
