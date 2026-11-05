@@ -45,7 +45,9 @@ class ProductService(
     private val productRepository: ProductRepository,
     private val aliasRepository: EntityIdAliasRepository,
     @Autowired(required = false)
-    private val productMediaRepository: ProductMediaRepository? = null
+    private val productMediaRepository: ProductMediaRepository? = null,
+    @Autowired(required = false)
+    private val globalProductService: GlobalProductService? = null
 ) {
     private val logger = LoggerFactory.getLogger(ProductService::class.java)
 
@@ -126,7 +128,7 @@ class ProductService(
         val incomingUpdatedAt = dto.updatedAt ?: serverNow
         val effectiveRemappedFromId = if (rawTargetId != canonical?.id) rawTargetId else null
 
-        return if (canonical != null) {
+        val result = if (canonical != null) {
             if (canonical.id != targetId || rawTargetId != canonical.id) {
                 // Colisão / Deduplicação: o ID recebido aponta para um canônico existente com outro ID
                 logger.info("Deduplicating product $targetId (raw=$rawTargetId) to canonical ${canonical.id} in household $householdId")
@@ -254,6 +256,24 @@ class ProductService(
             val saved = productRepository.save(newProduct)
             ProductUpsertResult(entity = saved, canonicalId = saved.id, remappedFromId = null)
         }
+
+        val consolidated = result.entity
+        if (globalProductService != null && !consolidated.isDeleted && consolidated.ean != null) {
+            try {
+                globalProductService.ingestFromUserProduct(
+                    ean = consolidated.ean,
+                    name = consolidated.name,
+                    brand = consolidated.brand,
+                    category = consolidated.category,
+                    measureUnit = consolidated.measureUnit,
+                    netWeight = consolidated.netWeight
+                )
+            } catch (ex: Exception) {
+                logger.warn("[Sync:GlobalCatalog] Failed to ingest product EAN={} into global catalog: {}", consolidated.ean, ex.message)
+            }
+        }
+
+        return result
     }
 
     @Transactional

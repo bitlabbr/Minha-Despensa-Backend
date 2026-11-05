@@ -23,8 +23,13 @@
 
 package com.bitlabbr.minhadespensa.modules.invoice.service
 
+import com.bitlabbr.minhadespensa.modules.catalog.service.GlobalProductService
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -269,5 +274,34 @@ class InvoiceParseServiceTest {
         assertEquals("KG", maca.measureUnit)
         assertEquals(1099L, maca.unitPriceInCents)
         assertEquals(1099L, maca.totalPriceInCents)
+    }
+
+    @Test
+    fun `parseHtml should invoke globalProductService ingestFromInvoiceItem for extracted items`() {
+        val globalProductService: GlobalProductService = mock()
+        val serviceWithCatalog = InvoiceParseService(globalProductService)
+
+        val sampleHtml = """
+            <!DOCTYPE html>
+            <html>
+            <body>
+                <div class="txtTopo">MERCADO CENTRAL</div>
+                <table id="tabResult">
+                    <tr id="Item + 1">
+                        <td class="txtTit">LEITE INTEGRAL 1L</td>
+                        <td class="RCod">(Código: 7891000100103)</td>
+                        <td class="Rqtd">Qtde.: 1,000</td>
+                        <td class="RUN">UN: UN</td>
+                        <td class="RvlUnit">Vl. Unit.: 5,00</td>
+                        <td class="valor">5,00</td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val result = serviceWithCatalog.parseHtml(sampleHtml, "http://nfce.sefaz.pe.gov.br/nfce/consulta?p=123")
+        assertEquals(1, result.items.size)
+        verify(globalProductService, times(1)).ingestFromInvoiceItem(any())
     }
 }
