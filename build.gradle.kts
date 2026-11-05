@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.bitlabbr.minhadespensa"
-version = "2.2.0-SNAPSHOT"
+version = "2.2.1-SNAPSHOT"
 description = "Minha-Despensa-Backend"
 
 springBoot {
